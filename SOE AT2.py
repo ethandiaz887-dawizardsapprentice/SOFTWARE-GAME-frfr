@@ -64,7 +64,7 @@ speed = 300
 class Bullet():
     bullets = []
 
-    def __init__(self, sprite, x, y):
+    def __init__(self, sprite, x, y, speed):
         super().__init__()
         Bullet.bullets.append(self)
         self.image = sprite
@@ -72,7 +72,7 @@ class Bullet():
         self.image.fill((255, 255, 0)) # Yellow
         self.position = Vector2(x, y)
         
-        self.speed = -50
+        self.speed = speed
 
 
     def update(self, deltaTime):
@@ -91,7 +91,7 @@ def shoot(spawn_pos):
     now = pygame.time.get_ticks()
     if now - last_shot > shoot_delay:
         last_shot = now
-        new_bullet = Bullet(pygame.image.load(assets/"BulletShot.png"), spawn_pos.x, spawn_pos.y)
+        new_bullet = Bullet(pygame.image.load(assets/"BulletShot.png"), spawn_pos.x, spawn_pos.y, -50)
         Bullet.bullets.append(new_bullet)
 
 
