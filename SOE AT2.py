@@ -60,34 +60,31 @@ speed = 300
 
 ##
 
-bullets = []
 
 class Bullet():
+    bullets = []
+
     def __init__(self, sprite, x, y):
         super().__init__()
+        Bullet.bullets.append(self)
         self.image = sprite
-        pygame.transform.scale(self.image, Vector2(0.1, 0.1))
+        self.image = pygame.transform.scale_by(self.image, 0.1)
         self.image.fill((255, 255, 0)) # Yellow
-        self.rect = self.image.get_rect(center=(x, y))
-        self.speed = -10
+        self.position = Vector2(x, y)
+        
+        self.speed = -50
 
 
     def update(self, deltaTime):
-        screen.blit(self.image, self.rect)
-        self.rect.y += self.speed * deltaTime
-        # if self.rect.bottom < 0: self.kill()
+        screen.blit(self.image, self.position)
+        self.position.y += (self.speed * deltaTime)
+        if self.position.y <= 0:
+            Bullet.bullets.remove(self)
+            
 
 
-    # ... inside __init__ ...
-shoot_delay = 250 # ms
+shoot_delay = 1 # ms
 last_shot = pygame.time.get_ticks()
-
-#def shoot(self, bullets):
-    #global shoot_delay, last_shot
-    #now = pygame.time.get_ticks()
-    #if now - last_shot > shoot_delay:
-      #  last_shot = now
-       # bullets.add(Bullet(pygame.image.load(assets/"BulletShot.png")))
 
 def shoot(spawn_pos):
     global last_shot
@@ -95,7 +92,7 @@ def shoot(spawn_pos):
     if now - last_shot > shoot_delay:
         last_shot = now
         new_bullet = Bullet(pygame.image.load(assets/"BulletShot.png"), spawn_pos.x, spawn_pos.y)
-        bullets.append(new_bullet)
+        Bullet.bullets.append(new_bullet)
 
 
 ##
@@ -160,7 +157,7 @@ while running:
 
     screen.fill((119, 178, 212))
 
-    for bullet in bullets:
+    for bullet in Bullet.bullets:
         bullet.update(deltaTime)
 
     screen.blit(playerplaneframes[playerplanecurrentframe], position)
@@ -170,4 +167,3 @@ while running:
     fps = 0 # 0: no limit
     deltaTime = clock.tick(fps) /1000
     deltaTime = max(0.001, min(0.1, deltaTime))
-
