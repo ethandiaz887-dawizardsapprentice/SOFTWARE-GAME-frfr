@@ -57,20 +57,27 @@ downHeld = False
 
 speed = 300
 
-
+bulletspritesheet = pygame.image.load(assets/"BulletShot.png")
+bulletframes = GetDaFrames(spritesheet, (2, 3))
+bulletcurrentframe = 0
+bulletlasttick = pygame.time.get_ticks()
 ##
 
 
 class Bullet():
     bullets = []
 
-    def __init__(self, sprite, x, y, speed):
+    def __init__(self, x, y, speed, bulletframes):
+
         super().__init__()
+        self.frames = bulletframes
         Bullet.bullets.append(self)
-        self.image = sprite
-        self.image = pygame.transform.scale_by(self.image, 0.1)
-        self.image.fill((255, 255, 0)) # Yellow
-        self.position = Vector2(x, y)
+        self.image = bulletframes[0]
+        self.currentframe = 0
+        self.lastframetick = pygame.time.get_ticks()
+        #self.image = pygame.transform.scale_by(self.image, 0.1)
+        #self.image.fill((255, 255, 0)) # Yellow
+        self.position = Vector2(x-self.image.get_width()/2, y)
         
         self.speed = speed
 
@@ -81,6 +88,7 @@ class Bullet():
         if self.position.y <= 0:
             Bullet.bullets.remove(self)
             
+        
 
 
 shoot_delay = 1 # ms
@@ -91,10 +99,14 @@ def shoot(spawn_pos):
     now = pygame.time.get_ticks()
     if now - last_shot > shoot_delay:
         last_shot = now
-        new_bullet = Bullet(pygame.image.load(assets/"BulletShot.png"), spawn_pos.x, spawn_pos.y, -50)
+        new_bullet = Bullet((bulletspritesheet), spawn_pos.x-16, spawn_pos.y, -50)
         Bullet.bullets.append(new_bullet)
-
-
+        new_bullet = Bullet((bulletspritesheet), spawn_pos.x-8, spawn_pos.y, -50)
+        Bullet.bullets.append(new_bullet)
+        new_bullet = Bullet((bulletspritesheet), spawn_pos.x+16, spawn_pos.y, -50)
+        Bullet.bullets.append(new_bullet)
+        new_bullet = Bullet((bulletspritesheet), spawn_pos.x+8, spawn_pos.y, -50)
+        Bullet.bullets.append(new_bullet)
 ##
 
 while running:
@@ -120,8 +132,11 @@ while running:
             if event.key == pygame.K_SPACE:    
                 plane_size = playerplaneframes[playerplanecurrentframe].get_size()
                 center_x = position.x + (plane_size[0] / 2)
+
+
                 center_y = position.y
                 shoot(Vector2(center_x, center_y))
+                
            
             ##
             #if event.key == pygame.K_SPACE:
@@ -153,6 +168,12 @@ while running:
         if playerplanecurrentframe > len(playerplaneframes) -1:
             playerplanecurrentframe = 0
 
+    if bulletlasttick + 1000/24 <= pygame.time.get_ticks():
+        bulletlasttick = pygame.time.get_ticks()
+        bulletcurrentframe += 1
+        if bulletcurrentframe > len(bulletframes) -1:
+            bulletcurrentframe = 0
+
 
 
     screen.fill((119, 178, 212))
@@ -160,7 +181,11 @@ while running:
     for bullet in Bullet.bullets:
         bullet.update(deltaTime)
 
+
+
     screen.blit(playerplaneframes[playerplanecurrentframe], position)
+
+
     
     pygame.display.flip()
 
