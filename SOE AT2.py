@@ -9,7 +9,14 @@ pygame.init()
 root = Path(__file__).resolve().parents[0]
 assets = root/"Assets"
 
-screen = pygame.display.set_mode((1080, 720), pygame.RESIZABLE)
+# ---- WINDOW & VIRTUAL SCREEN SETUP ----
+# This represents the actual window on your monitor
+window = pygame.display.set_mode((1080, 720), pygame.RESIZABLE)
+
+# This is your virtual canvas. All your game mechanics stay comfortably inside this 1080x720 space!
+screen = pygame.Surface((1080, 720))
+
+
 clock = pygame.time.Clock()
 running = True
 game_over = False  # Track game over state
@@ -33,6 +40,17 @@ def GetDaFrames(spritesheet, grid):
         frames.append(GetFrame(spritesheet, grid, i))
     return frames
 
+def get_angle_to_target(source_pos, target_pos):
+    """
+    Calculates the angle needed to rotate a Pygame sprite to face a target.
+    (Assumes the original, un-rotated sprite is pointing straight UP)
+    """
+    dx = target_pos.x - source_pos.x
+    dy = target_pos.y - source_pos.y
+    rads = math.atan2(-dy, dx) 
+    degs = math.degrees(rads)
+    return degs - 90 
+
 # ---- SCORE & GAME STATE SETUP ----
 score = 0
 
@@ -48,6 +66,19 @@ else:
     print(f"Custom font '{font_filename}' not found in Assets. Using system default fallback.")
     ui_font = pygame.font.SysFont("Arial", 32, bold=True)
     game_over_font = pygame.font.SysFont("Arial", 80, bold=True)
+
+# --- OCEAN SETUP ---
+
+ocean_sheet = pygame.image.load(assets/"OceanTile2.2.png")
+
+ocean_frames = GetDaFrames(ocean_sheet, (1, 2)) 
+
+ocean_scroll_y = 0
+ocean_scroll_speed = 50 # Speed the ocean moves down (pixels per second)
+
+ocean_current_frame = 0
+ocean_anim_timer = pygame.time.get_ticks()
+
 
 # ---- PLAYER SETUP ----
 position = Vector2(590,360)
@@ -75,6 +106,14 @@ downHeld = False
 # --- BULLET SETUP ---
 bulletspritesheet = pygame.image.load(assets/"NewBulletShot.png")
 bulletframes = GetDaFrames(bulletspritesheet, (3, 2))
+
+# NEW: Modular Guided Missile Asset Setup
+try:
+    missile_sheet = pygame.image.load(assets/"GuidedBullet.png")
+    missile_frames = GetDaFrames(missile_sheet, (3, 2))
+except FileNotFoundError:
+    print("GuidedMissile.png not found! Falling back to bullet frames.")
+    missile_frames = bulletframes
 
 # --- Enemy Assets ---
 try:
@@ -114,7 +153,7 @@ boatenemy_explosion_frames = GetDaFrames(boatenemydeath_sheet, (3, 2))
 class Enemy():
     enemies = []
 
-    def __init__(self, x, y, speed, frames, explosion_frames, hp=1, shoot_delay=2000):
+    def __init__(self, x, y, speed, frames, explosion_frames, hp=1, shoot_delay=2000, enemy_type="Basic"):
         super().__init__()
         self.frames = frames
         self.explosion_frames = explosion_frames
@@ -140,6 +179,10 @@ class Enemy():
         
         self.last_hit_time = 0
         self.hit_cooldown = 100 
+
+        # Modular Tracking Properties
+        self.enemy_type = enemy_type
+        self.missile_fired = False
 
         Enemy.enemies.append(self)
 
@@ -181,10 +224,19 @@ class Enemy():
         self.image = self.frames[self.currentframe]
 
         if self.state == "alive":
+            # Reverted to clean standard top-down vertical movement
             self.position.y += (self.speed * deltaTime)
             self.rect.topleft = (self.position.x, self.position.y) 
 
             now = pygame.time.get_ticks()
+            
+            # --- E4 PROXIMITY LOGIC ---
+            if self.enemy_type == "E4" and not self.missile_fired:
+                dist_to_player = math.hypot(position.x - self.position.x, position.y - self.position.y)
+                if dist_to_player < 450:
+                    self.missile_fired = True
+                    TrackingMissile(self.rect.centerx, self.rect.bottom, 220, missile_frames, lifetime=4000)
+
             if now - self.last_shot > self.shoot_delay:
                 self.last_shot = now
                 Bullet(self.rect.centerx, self.rect.bottom, 200, bulletframes, is_enemy=True)
@@ -201,11 +253,12 @@ class Enemy():
         if not self.is_flashing:
             screen.blit(self.image, self.position)
     
+        # ---- Fix: Only delete off-screen enemies if they are still alive! ----
         if self.position.y > 800 and self in Enemy.enemies:
-            # Deduct score if a standard living enemy makes it past the bottom perimeter
-            if self.state == "alive" and not isinstance(self, SpecialEnemy):
-                score = max(0, score - 50)  # Optional clamp to prevent sub-zero scores
-            Enemy.enemies.remove(self)
+            if self.state == "alive":
+                if not isinstance(self, SpecialEnemy):
+                    score = max(0, score - 50) 
+                Enemy.enemies.remove(self)
 
 class SpecialEnemy(Enemy):
     def __init__(self, x, start_y, speed, frames, explosion_frames, track_frames, hp, hover_y, hover_time):
@@ -273,6 +326,29 @@ class SpecialEnemy(Enemy):
         else:
             screen.blit(self.image, self.position)
 
+class TrailParticle:
+    particles = []
+
+    def __init__(self, x, y):
+        self.position = Vector2(x, y)
+        self.radius = random.uniform(3, 6)
+        self.life = 255  # Used for alpha transparency
+        self.decay_rate = random.uniform(300, 500)
+
+        TrailParticle.particles.append(self)
+
+    def update(self, deltaTime):
+        self.life -= self.decay_rate * deltaTime
+        self.radius -= 2 * deltaTime
+        if self.life <= 0 or self.radius <= 0:
+            if self in TrailParticle.particles:
+                TrailParticle.particles.remove(self)
+
+    def draw(self, surface):
+        if self.life > 0 and self.radius > 0:
+            s = pygame.Surface((int(self.radius * 2), int(self.radius * 2)), pygame.SRCALPHA)
+            pygame.draw.circle(s, (150, 150, 150, int(self.life)), (int(self.radius), int(self.radius)), int(self.radius))
+            surface.blit(s, (self.position.x - self.radius, self.position.y - self.radius))
 
 class Bullet():
     bullets = []
@@ -319,6 +395,9 @@ class TrackingMissile(Bullet):
         self.base_speed = speed
         self.spawn_time = pygame.time.get_ticks()
         self.lifetime = lifetime
+        
+        # Capture un-rotated modular frames directly
+        self.original_frames = [f.copy() for f in frames]
 
     def update(self, deltaTime):
         now = pygame.time.get_ticks()
@@ -329,6 +408,7 @@ class TrackingMissile(Bullet):
 
         target_x = position.x + (player_rect.width / 2)
         target_y = position.y + (player_rect.height / 2)
+        target_center = Vector2(target_x, target_y)
         
         dir_x = target_x - self.position.x
         dir_y = target_y - self.position.y
@@ -341,7 +421,30 @@ class TrackingMissile(Bullet):
         self.velocity.x = dir_x * self.base_speed
         self.velocity.y = dir_y * self.base_speed
 
-        super().update(deltaTime)
+        self.position += self.velocity * deltaTime
+
+        if self.lastframetick + 1000/24 <= pygame.time.get_ticks():
+            self.currentframe = (self.currentframe + 1) % len(self.original_frames)
+            self.lastframetick = pygame.time.get_ticks()
+
+        orig_image = self.original_frames[self.currentframe]
+        target_angle = get_angle_to_target(self.position, target_center)
+        self.image = pygame.transform.rotate(orig_image, target_angle)
+        
+        self.rect = self.image.get_rect(center=(self.position.x, self.position.y))
+
+        # Exhaust trail particles logic
+        tail_offset = orig_image.get_height() / 2
+        tail_x = self.position.x - (dir_x * tail_offset)
+        tail_y = self.position.y - (dir_y * tail_offset)
+        TrailParticle(tail_x, tail_y)
+
+        screen.blit(self.image, self.rect.topleft)
+
+        if (self.position.y <= -100 or self.position.y >= 850 or 
+            self.position.x <= -100 or self.position.x >= 1180):
+            if self in Bullet.bullets:
+                Bullet.bullets.remove(self)
 
 shoot_delay = 100 
 last_shot = pygame.time.get_ticks()
@@ -368,9 +471,26 @@ while running:
         if event.type == pygame.QUIT:
             running = False
         
-        # Only accept ship controls if the player is still alive
-        if not game_over:
-            if event.type == pygame.KEYDOWN:
+        if event.type == pygame.KEYDOWN:
+            if game_over:
+                # ---- RESTART MECHANIC ----
+                if event.key == pygame.K_SPACE:
+                    game_over = False
+                    player_lives = 3
+                    score = 0
+                    position = Vector2(590, 360)
+                    player_invulnerable = False
+                    leftHeld = rightHeld = upHeld = downHeld = False
+                    
+                    Enemy.enemies.clear()
+                    Bullet.bullets.clear()
+                    TrailParticle.particles.clear()
+                    
+                    now = pygame.time.get_ticks()
+                    enemy_spawn_timer = now
+                    special_enemy_spawn_timer = now
+            else:
+                # ---- NORMAL SHIP CONTROLS ----
                 if event.key == pygame.K_LEFT or event.key == pygame.K_a: leftHeld = True
                 if event.key == pygame.K_RIGHT or event.key == pygame.K_d: rightHeld = True
                 if event.key == pygame.K_UP or event.key == pygame.K_w: upHeld = True
@@ -382,7 +502,8 @@ while running:
                     center_y = position.y
                     shoot(Vector2(center_x, center_y))
 
-            elif event.type == pygame.KEYUP:
+        elif event.type == pygame.KEYUP:
+            if not game_over:
                 if event.key == pygame.K_LEFT or event.key == pygame.K_a: leftHeld = False
                 if event.key == pygame.K_RIGHT or event.key == pygame.K_d: rightHeld = False        
                 if event.key == pygame.K_UP or event.key == pygame.K_w: upHeld = False
@@ -410,17 +531,21 @@ while running:
         now = pygame.time.get_ticks()
         if now - enemy_spawn_timer > enemy_spawn_delay:
             enemy_spawn_timer = now
-            random_x = random.randint(50, 1030)
+            
             enemy_type = random.choice(["E1", "E2", "E3", "E4"])
             
+            # Reverted back to classic top-down spawning layout
+            x = random.randint(50, 1030)
+            y = -50
+            
             if enemy_type == "E1":
-                Enemy(random_x, -50, 100, enemy1_frames, explosion_frames, hp=1, shoot_delay=2000)
+                Enemy(x, y, 100, enemy1_frames, explosion_frames, hp=1, shoot_delay=2000, enemy_type="E1")
             elif enemy_type == "E2":
-                Enemy(random_x, -50, 100, enemy2_frames, explosion_frames, hp=2, shoot_delay=1500)
+                Enemy(x, y, 100, enemy2_frames, explosion_frames, hp=2, shoot_delay=1500, enemy_type="E2")
             elif enemy_type == "E3":
-                Enemy(random_x, -50, 125, enemy3_frames, explosion_frames, hp=2, shoot_delay=1000) 
+                Enemy(x, y, 125, enemy3_frames, explosion_frames, hp=2, shoot_delay=1000, enemy_type="E3") 
             elif enemy_type == "E4":
-                Enemy(random_x, -50, 150, enemy4_frames, explosion_frames, hp=3, shoot_delay=800)
+                Enemy(x, y, 150, enemy4_frames, explosion_frames, hp=3, shoot_delay=800, enemy_type="E4")
 
         if now - special_enemy_spawn_timer > special_enemy_spawn_delay:
             special_enemy_spawn_timer = now
@@ -456,22 +581,44 @@ while running:
                         Bullet.bullets.remove(bullet)
                         
                     if player_lives <= 0:
-                        player_lives = 0  # Clamp at zero for clean UI display
+                        player_lives = 0  
                         game_over = True
 
     # ---- RENDERING ENGINE ----
-    screen.fill((119, 178, 212))
+    screen.fill((20, 40, 80))
 
-    # Keep rendering bullets and enemies static or dynamic
+    # Update Ocean Animation
+    now = pygame.time.get_ticks()
+    if now - ocean_anim_timer > 1000:
+        ocean_anim_timer = now
+        ocean_current_frame = (ocean_current_frame + 1) % len(ocean_frames)
+
+    # Update Ocean Scrolling
+    if not game_over:
+        ocean_scroll_y += ocean_scroll_speed * deltaTime
+        if ocean_scroll_y >= 64:
+            ocean_scroll_y -= 64 
+            
+    # Draw Tiled Background
+    screen_w, screen_h = screen.get_size()
+    for x in range(0, screen_w + 64, 64):
+        for y in range(-64, screen_h + 64, 64):
+            screen.blit(ocean_frames[ocean_current_frame], (x, y + int(ocean_scroll_y)))
+
+    # Render Trail Particles
+    for particle in TrailParticle.particles[:]:
+        particle.update(deltaTime if not game_over else 0)
+        particle.draw(screen)
+
+    # Render Bullets and Enemies
     for bullet in Bullet.bullets[:]:
         bullet.update(deltaTime if not game_over else 0)
 
     for enemy in Enemy.enemies[:]:
         enemy.update(deltaTime if not game_over else 0)
 
-    # ---- Player Display & Animation Logic ----
+    # ---- Player Display ----
     if not game_over:
-        now = pygame.time.get_ticks()
         if player_invulnerable:
             if now - player_invulnerable_timer > invulnerability_duration:
                 player_invulnerable = False
@@ -481,11 +628,9 @@ while running:
             screen.blit(playerplaneframes[playerplanecurrentframe], position)
 
     # ---- DRAW TEXT ON SCREEN (HUD) ----
-    # Render and blit Score to Top Left
     score_surface = ui_font.render(f"SCORE: {score}", True, (255, 255, 255))
     screen.blit(score_surface, (20, 20))
 
-    # Render and blit Player Lives to Top Right
     lives_surface = ui_font.render(f"LIVES: {player_lives}", True, (255, 255, 255))
     lives_rect = lives_surface.get_rect(topright=(1060, 20))
     screen.blit(lives_surface, lives_rect)
@@ -493,12 +638,36 @@ while running:
     # ---- DEAD STATE INTERACTION ----
     if game_over:
         death_surface = game_over_font.render("YOU DIED", True, (200, 30, 30))
-        death_rect = death_surface.get_rect(center=(1080 // 2, 720 // 2))
+        death_rect = death_surface.get_rect(center=(1080 // 2, 720 // 2 - 40))
         screen.blit(death_surface, death_rect)
+        
+        restart_surface = ui_font.render("PRESS SPACE TO RESTART", True, (255, 255, 255))
+        restart_rect = restart_surface.get_rect(center=(1080 // 2, 720 // 2 + 40))
+        screen.blit(restart_surface, restart_rect)
+
+    # ---- VIRTUAL CANVAS SCALING ENGINE ----
+    window_w, window_h = window.get_size()
+    game_ratio = 1080 / 720
+    window_ratio = window_w / window_h
+
+    if window_ratio > game_ratio:
+        new_h = window_h
+        new_w = int(new_h * game_ratio)
+    else:
+        new_w = window_w
+        new_h = int(new_w / game_ratio)
+
+    x_offset = (window_w - new_w) // 2
+    y_offset = (window_h - new_h) // 2
+
+    window.fill((0, 0, 0))
+
+    scaled_screen = pygame.transform.scale(screen, (new_w, new_h))
+    window.blit(scaled_screen, (x_offset, y_offset))
 
     pygame.display.flip()
 
-    fps = 60 # Setting standard target FPS cap
+    fps = 60 
     deltaTime = clock.tick(fps) / 1000
     deltaTime = max(0.001, min(0.1, deltaTime))
 
