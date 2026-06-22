@@ -10,16 +10,12 @@ root = Path(__file__).resolve().parents[0]
 assets = root/"Assets"
 
 # ---- WINDOW & VIRTUAL SCREEN SETUP ----
-# This represents the actual window on your monitor
 window = pygame.display.set_mode((1080, 720), pygame.RESIZABLE)
-
-# This is your virtual canvas. All your game mechanics stay comfortably inside this 1080x720 space!
 screen = pygame.Surface((1080, 720))
-
 
 clock = pygame.time.Clock()
 running = True
-game_over = False  # Track game over state
+game_over = False  
 
 def GetFrame(spritesheet, grid, frameIndex):
     columns = grid[0]
@@ -41,10 +37,6 @@ def GetDaFrames(spritesheet, grid):
     return frames
 
 def get_angle_to_target(source_pos, target_pos):
-    """
-    Calculates the angle needed to rotate a Pygame sprite to face a target.
-    (Assumes the original, un-rotated sprite is pointing straight UP)
-    """
     dx = target_pos.x - source_pos.x
     dy = target_pos.y - source_pos.y
     rads = math.atan2(-dy, dx) 
@@ -55,7 +47,6 @@ def get_angle_to_target(source_pos, target_pos):
 score = 0
 
 # ---- FONT SYSTEM SETUP ----
-# Change "ArcadeFont.ttf" to your exact custom font filename inside your Assets folder
 font_filename = "ArcadeFont.ttf" 
 custom_font_path = assets / font_filename
 
@@ -68,17 +59,12 @@ else:
     game_over_font = pygame.font.SysFont("Arial", 80, bold=True)
 
 # --- OCEAN SETUP ---
-
 ocean_sheet = pygame.image.load(assets/"OceanTile2.2.png")
-
 ocean_frames = GetDaFrames(ocean_sheet, (1, 2)) 
-
 ocean_scroll_y = 0
-ocean_scroll_speed = 50 # Speed the ocean moves down (pixels per second)
-
+ocean_scroll_speed = 50 
 ocean_current_frame = 0
 ocean_anim_timer = pygame.time.get_ticks()
-
 
 # ---- PLAYER SETUP ----
 position = Vector2(590,360)
@@ -107,7 +93,7 @@ downHeld = False
 bulletspritesheet = pygame.image.load(assets/"NewBulletShot.png")
 bulletframes = GetDaFrames(bulletspritesheet, (3, 2))
 
-# NEW: Modular Guided Missile Asset Setup
+# Guided Missile Asset Setup
 try:
     missile_sheet = pygame.image.load(assets/"GuidedBullet.png")
     missile_frames = GetDaFrames(missile_sheet, (3, 2))
@@ -122,6 +108,14 @@ try:
 except FileNotFoundError:
     print("No explosion spritesheet found. Using bullet frames as placeholder.")
     explosion_frames = bulletframes 
+
+# Universal Explosion Asset Setup
+try:
+    universal_explosion_sheet = pygame.image.load(assets/"UniversalExplosion.png")
+    universal_explosion_frames = GetDaFrames(universal_explosion_sheet, (2, 2)) 
+except FileNotFoundError:
+    print("UniversalExplosion.png not found! Falling back to standard explosion frames.")
+    universal_explosion_frames = explosion_frames
 
 enemy1 = pygame.image.load(assets/"EnemyPlane1.png")
 enemy1_frames = GetDaFrames(enemy1, (2, 3))
@@ -180,7 +174,6 @@ class Enemy():
         self.last_hit_time = 0
         self.hit_cooldown = 100 
 
-        # Modular Tracking Properties
         self.enemy_type = enemy_type
         self.missile_fired = False
 
@@ -205,7 +198,7 @@ class Enemy():
             self.currentframe = 0
             self.frames = self.explosion_frames 
             self.image = self.frames[0]
-            score += 100  # Award 100 points per enemy kill
+            score += 100  
 
     def update(self, deltaTime):
         global score
@@ -224,13 +217,11 @@ class Enemy():
         self.image = self.frames[self.currentframe]
 
         if self.state == "alive":
-            # Reverted to clean standard top-down vertical movement
             self.position.y += (self.speed * deltaTime)
             self.rect.topleft = (self.position.x, self.position.y) 
 
             now = pygame.time.get_ticks()
             
-            # --- E4 PROXIMITY LOGIC ---
             if self.enemy_type == "E4" and not self.missile_fired:
                 dist_to_player = math.hypot(position.x - self.position.x, position.y - self.position.y)
                 if dist_to_player < 450:
@@ -253,7 +244,6 @@ class Enemy():
         if not self.is_flashing:
             screen.blit(self.image, self.position)
     
-        # ---- Fix: Only delete off-screen enemies if they are still alive! ----
         if self.position.y > 800 and self in Enemy.enemies:
             if self.state == "alive":
                 if not isinstance(self, SpecialEnemy):
@@ -332,7 +322,7 @@ class TrailParticle:
     def __init__(self, x, y):
         self.position = Vector2(x, y)
         self.radius = random.uniform(3, 6)
-        self.life = 255  # Used for alpha transparency
+        self.life = 255  
         self.decay_rate = random.uniform(300, 500)
 
         TrailParticle.particles.append(self)
@@ -395,15 +385,44 @@ class TrackingMissile(Bullet):
         self.base_speed = speed
         self.spawn_time = pygame.time.get_ticks()
         self.lifetime = lifetime
+        self.state = "alive" 
+        self.hp = 2
         
-        # Capture un-rotated modular frames directly
         self.original_frames = [f.copy() for f in frames]
+        global universal_explosion_frames 
+        self.explosion_frames = [f.copy() for f in universal_explosion_frames] 
+
+    def explode(self):
+        if self.state == "alive":
+            self.state = "dying"
+            self.original_frames = self.explosion_frames
+            self.currentframe = 0
+            self.base_speed = 0 
+            self.velocity = Vector2(0, 0)
+            self.lastframetick = pygame.time.get_ticks()
 
     def update(self, deltaTime):
         now = pygame.time.get_ticks()
+
+        # Handle Explosion State
+        if self.state == "dying":
+            if self.lastframetick + 1000/24 <= pygame.time.get_ticks():
+                self.currentframe += 1
+                self.lastframetick = pygame.time.get_ticks()
+                
+                if self.currentframe >= len(self.original_frames):
+                    if self in Bullet.bullets:
+                        Bullet.bullets.remove(self)
+                    return
+
+            self.image = self.original_frames[self.currentframe]
+            self.rect = self.image.get_rect(center=(self.position.x, self.position.y))
+            screen.blit(self.image, self.rect.topleft)
+            return
+
+        # Alive State Logic
         if now - self.spawn_time > self.lifetime:
-            if self in Bullet.bullets:
-                Bullet.bullets.remove(self)
+            self.explode() 
             return
 
         target_x = position.x + (player_rect.width / 2)
@@ -433,7 +452,6 @@ class TrackingMissile(Bullet):
         
         self.rect = self.image.get_rect(center=(self.position.x, self.position.y))
 
-        # Exhaust trail particles logic
         tail_offset = orig_image.get_height() / 2
         tail_x = self.position.x - (dir_x * tail_offset)
         tail_y = self.position.y - (dir_y * tail_offset)
@@ -459,11 +477,55 @@ def shoot(spawn_pos):
         Bullet(spawn_pos.x+16, spawn_pos.y, -400, bulletframes, is_enemy=False)
         Bullet(spawn_pos.x+8, spawn_pos.y, -400, bulletframes, is_enemy=False)
 
+# ---- MODULAR SPAWNING HELPERS ----
+def spawn_enemy(e_type, x, y):
+    """Helper to instantiate enemies cleanly."""
+    if e_type == "E1":
+        Enemy(x, y, 100, enemy1_frames, explosion_frames, hp=1, shoot_delay=4000, enemy_type="E1")
+    elif e_type == "E2":
+        Enemy(x, y, 100, enemy2_frames, explosion_frames, hp=2, shoot_delay=3000, enemy_type="E2")
+    elif e_type == "E3":
+        Enemy(x, y, 125, enemy3_frames, explosion_frames, hp=2, shoot_delay=1500, enemy_type="E3") 
+    elif e_type == "E4":
+        Enemy(x, y, 150, enemy4_frames, explosion_frames, hp=3, shoot_delay=1000, enemy_type="E4")
+
+def get_formation_offsets(form_type, size):
+    """Returns a list of (x_offset, y_offset) relative to a formation's base coordinate."""
+    offsets = []
+    spacing = 50
+    
+    if form_type == "horizontal":
+        start_x = -((size - 1) * spacing) / 2
+        for i in range(size):
+            offsets.append((start_x + i * spacing, 0))
+            
+    elif form_type == "vertical":
+        for i in range(size):
+            offsets.append((0, -i * spacing))
+            
+    elif form_type == "v_shape":
+        offsets.append((0, 0)) # Leader at front
+        for i in range(1, size):
+            side = -1 if i % 2 != 0 else 1
+            row = (i + 1) // 2
+            offsets.append((side * row * spacing, -row * spacing))
+            
+    elif form_type == "half_v":
+        side = random.choice([-1, 1]) # Slant left or slant right
+        for i in range(size):
+            offsets.append((side * i * spacing, -i * spacing))
+            
+    return offsets
+
+# Spawning Timers
 enemy_spawn_timer = pygame.time.get_ticks()
 enemy_spawn_delay = 1500 
 
+formation_spawn_timer = pygame.time.get_ticks()
+formation_spawn_delay = random.randint(8000, 15000) 
+
 special_enemy_spawn_timer = pygame.time.get_ticks()
-special_enemy_spawn_delay = random.randint(8000, 14000) 
+special_enemy_spawn_delay = random.randint(10000, 18000) 
 
 # ---- MAIN GAME LOOP ----
 while running:
@@ -473,14 +535,14 @@ while running:
         
         if event.type == pygame.KEYDOWN:
             if game_over:
-                # ---- RESTART MECHANIC ----
                 if event.key == pygame.K_SPACE:
                     game_over = False
                     player_lives = 3
                     score = 0
                     position = Vector2(590, 360)
                     player_invulnerable = False
-                    leftHeld = rightHeld = upHeld = downHeld = False
+                    leftHeld = rightHeld = upHeld = False
+                    downHeld = False
                     
                     Enemy.enemies.clear()
                     Bullet.bullets.clear()
@@ -488,9 +550,9 @@ while running:
                     
                     now = pygame.time.get_ticks()
                     enemy_spawn_timer = now
+                    formation_spawn_timer = now
                     special_enemy_spawn_timer = now
             else:
-                # ---- NORMAL SHIP CONTROLS ----
                 if event.key == pygame.K_LEFT or event.key == pygame.K_a: leftHeld = True
                 if event.key == pygame.K_RIGHT or event.key == pygame.K_d: rightHeld = True
                 if event.key == pygame.K_UP or event.key == pygame.K_w: upHeld = True
@@ -509,7 +571,6 @@ while running:
                 if event.key == pygame.K_UP or event.key == pygame.K_w: upHeld = False
                 if event.key == pygame.K_DOWN or event.key == pygame.K_s: downHeld = False
 
-    # ---- POSITION ENGINE & LOGIC WRAPPERS ----
     if not game_over:
         if leftHeld: position.x -= speed*deltaTime
         if rightHeld: position.x += speed*deltaTime
@@ -529,28 +590,46 @@ while running:
 
         # ---- Spawning Framework ----
         now = pygame.time.get_ticks()
+        
+        # 1. Standard Staggered Enemy Spawning
         if now - enemy_spawn_timer > enemy_spawn_delay:
             enemy_spawn_timer = now
-            
             enemy_type = random.choice(["E1", "E2", "E3", "E4"])
-            
-            # Reverted back to classic top-down spawning layout
             x = random.randint(50, 1030)
             y = -50
+            spawn_enemy(enemy_type, x, y)
             
-            if enemy_type == "E1":
-                Enemy(x, y, 100, enemy1_frames, explosion_frames, hp=1, shoot_delay=2000, enemy_type="E1")
-            elif enemy_type == "E2":
-                Enemy(x, y, 100, enemy2_frames, explosion_frames, hp=2, shoot_delay=1500, enemy_type="E2")
-            elif enemy_type == "E3":
-                Enemy(x, y, 125, enemy3_frames, explosion_frames, hp=2, shoot_delay=1000, enemy_type="E3") 
-            elif enemy_type == "E4":
-                Enemy(x, y, 150, enemy4_frames, explosion_frames, hp=3, shoot_delay=800, enemy_type="E4")
+        # 2. Modular Formation Spawning
+        if now - formation_spawn_timer > formation_spawn_delay:
+            formation_spawn_timer = now
+            formation_spawn_delay = random.randint(8000, 15000) 
+            
+            form_type = random.choice(["horizontal", "vertical", "v_shape", "half_v"])
+            size = random.randint(3, 7)
+            
+            # Determine formation pool based on requested logic
+            pool_roll = random.random()
+            if pool_roll < 0.90:
+                allowed_types = ["E1", "E2"] 
+            elif pool_roll < 0.95:
+                allowed_types = ["E3"] 
+            else:
+                allowed_types = ["E4"] 
+                
+            base_x = random.randint(250, 830) 
+            base_y = -100
+            
+            offsets = get_formation_offsets(form_type, size)
+            for ox, oy in offsets:
+                spawn_x = max(50, min(1030, base_x + ox)) 
+                spawn_y = base_y + oy
+                e_type = random.choice(allowed_types)
+                spawn_enemy(e_type, spawn_x, spawn_y)
 
+        # 3. Special Enemy Spawning (Bosses)
         if now - special_enemy_spawn_timer > special_enemy_spawn_delay:
             special_enemy_spawn_timer = now
             special_enemy_spawn_delay = random.randint(10000, 18000) 
-            
             special_enemy_type = random.choice(["B1", "B2"]) 
             random_boss_x = random.randint(100, 980)
 
@@ -561,15 +640,32 @@ while running:
 
         # ---- Collision Processing Loops ----
         for bullet in Bullet.bullets[:]:
+            if isinstance(bullet, TrackingMissile) and bullet.state != "alive":
+                continue
+
             if not bullet.is_enemy:
+                # 1. Player Bullet vs Enemy Logic
                 for enemy in Enemy.enemies[:]:
                     if enemy.state == "alive" and bullet.rect.colliderect(enemy.rect):
                         enemy.take_damage(1) 
                         if bullet in Bullet.bullets:
                             Bullet.bullets.remove(bullet)
                         break 
+                
+                # 2. Player Bullet vs Tracking Missile Logic
+                if bullet in Bullet.bullets: 
+                    for enemy_bullet in Bullet.bullets[:]:
+                        if isinstance(enemy_bullet, TrackingMissile) and enemy_bullet.state == "alive":
+                            if bullet.rect.colliderect(enemy_bullet.rect):
+                                enemy_bullet.hp -= 1
+                                if enemy_bullet.hp <= 0:
+                                    enemy_bullet.explode() 
+                                if bullet in Bullet.bullets:
+                                    Bullet.bullets.remove(bullet)
+                                break
             
             elif bullet.is_enemy:
+                # 3. Enemy Bullet/Missile vs Player Logic
                 if not player_invulnerable and bullet.rect.colliderect(player_rect):
                     player_lives -= 1
                     print(f"Player Hit! Lives remaining: {player_lives}")
@@ -577,8 +673,11 @@ while running:
                     player_invulnerable = True
                     player_invulnerable_timer = pygame.time.get_ticks()
                     
-                    if bullet in Bullet.bullets:
-                        Bullet.bullets.remove(bullet)
+                    if isinstance(bullet, TrackingMissile):
+                        bullet.explode() 
+                    else:
+                        if bullet in Bullet.bullets:
+                            Bullet.bullets.remove(bullet)
                         
                     if player_lives <= 0:
                         player_lives = 0  
@@ -587,30 +686,25 @@ while running:
     # ---- RENDERING ENGINE ----
     screen.fill((20, 40, 80))
 
-    # Update Ocean Animation
     now = pygame.time.get_ticks()
     if now - ocean_anim_timer > 1000:
         ocean_anim_timer = now
         ocean_current_frame = (ocean_current_frame + 1) % len(ocean_frames)
 
-    # Update Ocean Scrolling
     if not game_over:
         ocean_scroll_y += ocean_scroll_speed * deltaTime
         if ocean_scroll_y >= 64:
             ocean_scroll_y -= 64 
             
-    # Draw Tiled Background
     screen_w, screen_h = screen.get_size()
     for x in range(0, screen_w + 64, 64):
         for y in range(-64, screen_h + 64, 64):
             screen.blit(ocean_frames[ocean_current_frame], (x, y + int(ocean_scroll_y)))
 
-    # Render Trail Particles
     for particle in TrailParticle.particles[:]:
         particle.update(deltaTime if not game_over else 0)
         particle.draw(screen)
 
-    # Render Bullets and Enemies
     for bullet in Bullet.bullets[:]:
         bullet.update(deltaTime if not game_over else 0)
 
