@@ -7,7 +7,7 @@ import math
 pygame.init()
 
 root = Path(__file__).resolve().parents[0]
-assets = root/"Assets"
+assets = root / "Assets"
 
 # ---- WINDOW & VIRTUAL SCREEN SETUP ----
 window = pygame.display.set_mode((1080, 720), pygame.RESIZABLE)
@@ -45,21 +45,37 @@ def get_angle_to_target(source_pos, target_pos):
 
 # ---- SCORE & GAME STATE SETUP ----
 score = 0
+kill_count = 0
+double_points_active = False
+double_points_start = 0
+double_points_duration = 30000
+
+insta_kill_active = False
+insta_kill_start = 0
+insta_kill_duration = 30000
 
 # ---- FONT SYSTEM SETUP ----
-font_filename = "ArcadeFont.ttf" 
+font_filename = "Pixel Digivolve.otf"
 custom_font_path = assets / font_filename
 
 if custom_font_path.exists():
-    ui_font = pygame.font.Font(str(custom_font_path), 28)
-    game_over_font = pygame.font.Font(str(custom_font_path), 72)
+    font_small = pygame.font.Font(str(custom_font_path), 20)
+    font_medium = pygame.font.Font(str(custom_font_path), 28)
+    font_large = pygame.font.Font(str(custom_font_path), 36)
+    font_huge = pygame.font.Font(str(custom_font_path), 64)
+    ui_font = font_medium
+    game_over_font = font_huge
 else:
     print(f"Custom font '{font_filename}' not found in Assets. Using system default fallback.")
-    ui_font = pygame.font.SysFont("Arial", 32, bold=True)
-    game_over_font = pygame.font.SysFont("Arial", 80, bold=True)
+    font_small = pygame.font.SysFont("Arial", 20, bold=True)
+    font_medium = pygame.font.SysFont("Arial", 28, bold=True)
+    font_large = pygame.font.SysFont("Arial", 36, bold=True)
+    font_huge = pygame.font.SysFont("Arial", 64, bold=True)
+    ui_font = font_medium
+    game_over_font = font_huge
 
 # --- OCEAN SETUP ---
-ocean_sheet = pygame.image.load(assets/"OceanTile2.2.png")
+ocean_sheet = pygame.image.load(assets / "OceanTile2.2.png")
 ocean_frames = GetDaFrames(ocean_sheet, (1, 2)) 
 ocean_scroll_y = 0
 ocean_scroll_speed = 50 
@@ -67,15 +83,15 @@ ocean_current_frame = 0
 ocean_anim_timer = pygame.time.get_ticks()
 
 # ---- PLAYER SETUP ----
-position = Vector2(590,360)
+position = Vector2(590, 360)
 speed = 300
 player_rect = pygame.Rect(position.x, position.y, 0, 0) 
-player_lives = 3
+player_lives = 20
 player_invulnerable = False
 player_invulnerable_timer = 0
 invulnerability_duration = 1500 
 
-spritesheet = pygame.image.load(assets/"PlayerPlane.png")
+spritesheet = pygame.image.load(assets / "PlayerPlane.png")
 playerplaneframes = GetDaFrames(spritesheet, (2, 3))
 playerplanecurrentframe = 0
 playerplanelasttick = pygame.time.get_ticks()
@@ -90,60 +106,82 @@ upHeld = False
 downHeld = False
 
 # --- BULLET SETUP ---
-bulletspritesheet = pygame.image.load(assets/"NewBulletShot.png")
+bulletspritesheet = pygame.image.load(assets / "NewBulletShot.png")
 bulletframes = GetDaFrames(bulletspritesheet, (3, 2))
 
-# Guided Missile Asset Setup
 try:
-    missile_sheet = pygame.image.load(assets/"GuidedBullet.png")
+    missile_sheet = pygame.image.load(assets / "GuidedBullet.png")
     missile_frames = GetDaFrames(missile_sheet, (3, 2))
 except FileNotFoundError:
-    print("GuidedMissile.png not found! Falling back to bullet frames.")
+    print("GuidedBullet.png not found! Falling back to bullet frames.")
     missile_frames = bulletframes
 
-# --- Enemy Assets ---
+# --- POWERUP SETUP ---
+doublepointssheet = pygame.image.load(assets / "DoublePointsPowerup.png")
+doublepointsframes = GetDaFrames(doublepointssheet, (2, 3))
+
+healsheet = pygame.image.load(assets / "HealPowerup.png")
+healframes = GetDaFrames(healsheet, (2, 3))
+
+instakillsheet = pygame.image.load(assets / "InstakillPowerup.png")
+instakillframes = GetDaFrames(instakillsheet, (4, 2))
+
 try:
-    death_sheet = pygame.image.load(assets/"EnemyPlaneDeath.png")
+    death_sheet = pygame.image.load(assets / "EnemyPlaneDeath.png")
     explosion_frames = GetDaFrames(death_sheet, (2, 3)) 
 except FileNotFoundError:
     print("No explosion spritesheet found. Using bullet frames as placeholder.")
     explosion_frames = bulletframes 
 
-# Universal Explosion Asset Setup
 try:
-    universal_explosion_sheet = pygame.image.load(assets/"UniversalExplosion.png")
+    universal_explosion_sheet = pygame.image.load(assets / "UniversalExplosion.png")
     universal_explosion_frames = GetDaFrames(universal_explosion_sheet, (2, 2)) 
 except FileNotFoundError:
     print("UniversalExplosion.png not found! Falling back to standard explosion frames.")
     universal_explosion_frames = explosion_frames
 
-enemy1 = pygame.image.load(assets/"EnemyPlane1.png")
+enemy1 = pygame.image.load(assets / "EnemyPlane1.png")
 enemy1_frames = GetDaFrames(enemy1, (2, 3))
 
-enemy2 = pygame.image.load(assets/"EnemyPlane2.png")
+enemy2 = pygame.image.load(assets / "EnemyPlane2.png")
 enemy2_frames = GetDaFrames(enemy2, (2, 3))
 
-enemy3 = pygame.image.load(assets/"EnemyPlane3.png")
+enemy3 = pygame.image.load(assets / "EnemyPlane3.png")
 enemy3_frames = GetDaFrames(enemy3, (2, 3))
 
-enemy4 = pygame.image.load(assets/"EnemyPlane4.png")
+enemy4 = pygame.image.load(assets / "EnemyPlane4.png")
 enemy4_frames = GetDaFrames(enemy4, (2, 3))
 
-bigenemy_sheet = pygame.image.load(assets/"BigEnemy.png")
+bigenemy_sheet = pygame.image.load(assets / "BigEnemy.png")
 bigenemy_frames = GetDaFrames(bigenemy_sheet, (2, 3))
 
-bigenemy_death_sheet = pygame.image.load(assets/"BigEnemyDeath.png")
+bigenemy_death_sheet = pygame.image.load(assets / "BigEnemyDeath.png")
 bigenemy_explosion_frames = GetDaFrames(bigenemy_death_sheet, (2, 2))
 
-spinny_blade_sheet = pygame.image.load(assets/"SpinnyBlade.png")
+spinny_blade_sheet = pygame.image.load(assets / "SpinnyBlade.png")
 spinny_blade_frames = GetDaFrames(spinny_blade_sheet, (2, 2))
 
-boatenemy_sheet = pygame.image.load(assets/"EnemyBoat.png")
+boatenemy_sheet = pygame.image.load(assets / "EnemyBoat.png")
 boatenemy_frames = GetDaFrames(boatenemy_sheet, (3, 2))
 
-boatenemydeath_sheet = pygame.image.load(assets/"EnemyBoatDeath.png")
+boatenemydeath_sheet = pygame.image.load(assets / "EnemyBoatDeath.png")
 boatenemy_explosion_frames = GetDaFrames(boatenemydeath_sheet, (3, 2))
 
+# ---- BOSS ASSET LOADING ----
+boss_main_sprite = pygame.image.load(assets / "BossSprite.png")
+boss_hitbox_sprite = pygame.image.load(assets / "BossSpriteHitBox.png")
+
+boss_gun1_img = pygame.image.load(assets / "BossGun1.png")
+boss_gun1_dead_img = pygame.image.load(assets / "BossGun1Dead.png")
+
+boss_gun2_img = pygame.image.load(assets / "BossGun2.png")
+boss_gun2_dead_img = pygame.image.load(assets / "BossGun2Dead.png")
+
+boss_gun3_img = pygame.image.load(assets / "BossGun3.png")
+boss_gun3_dead_img = pygame.image.load(assets / "BossGun3Dead.png")
+
+
+# ---- ENEMY CLASSES ----
 class Enemy():
     enemies = []
 
@@ -192,13 +230,22 @@ class Enemy():
                 self.flash_start_time = now
 
     def die(self):
-        global score
+        global score, kill_count, double_points_active
         if self.state == "alive":
             self.state = "dying"
             self.currentframe = 0
             self.frames = self.explosion_frames 
             self.image = self.frames[0]
-            score += 100  
+            
+            # Award points (doubled if DoublePoints powerup is active)
+            points = 200 if double_points_active else 100
+            score += points
+            kill_count += 1
+            
+            # Spawn powerup every 25 kills
+            if kill_count % 25 == 0:
+                powerup_type = random.choice(["DoublePoints", "Heal", "InstaKill"])
+                Powerup(self.rect.centerx, self.rect.centery, powerup_type)  
 
     def update(self, deltaTime):
         global score
@@ -249,6 +296,7 @@ class Enemy():
                 if not isinstance(self, SpecialEnemy):
                     score = max(0, score - 50) 
                 Enemy.enemies.remove(self)
+
 
 class SpecialEnemy(Enemy):
     def __init__(self, x, start_y, speed, frames, explosion_frames, track_frames, hp, hover_y, hover_time):
@@ -316,6 +364,8 @@ class SpecialEnemy(Enemy):
         else:
             screen.blit(self.image, self.position)
 
+
+# ---- TRANSLATIONAL PARTICLE AND BULLET CLASSES ----
 class TrailParticle:
     particles = []
 
@@ -339,6 +389,73 @@ class TrailParticle:
             s = pygame.Surface((int(self.radius * 2), int(self.radius * 2)), pygame.SRCALPHA)
             pygame.draw.circle(s, (150, 150, 150, int(self.life)), (int(self.radius), int(self.radius)), int(self.radius))
             surface.blit(s, (self.position.x - self.radius, self.position.y - self.radius))
+
+
+# ---- POWERUP SYSTEM ----
+class Powerup:
+    powerups = []
+    
+    def __init__(self, x, y, powerup_type):
+        self.position = Vector2(x, y)
+        self.powerup_type = powerup_type
+        self.spawn_time = pygame.time.get_ticks()
+        self.duration = 20000  # 20 seconds
+        self.currentframe = 0
+        self.lastframetick = pygame.time.get_ticks()
+        self.flash_start = self.spawn_time  # Start flashing immediately
+        
+        # Set frames based on powerup type
+        if powerup_type == "DoublePoints":
+            self.frames = doublepointsframes
+            self.color = (255, 200, 0)  # Yellow
+        elif powerup_type == "Heal":
+            self.frames = healframes
+            self.color = (0, 255, 0)  # Green
+        elif powerup_type == "InstaKill":
+            self.frames = instakillframes
+            self.color = (255, 0, 0)  # Red
+        
+        self.image = self.frames[0]
+        self.rect = self.image.get_rect(center=(x, y))
+        
+        Powerup.powerups.append(self)
+    
+    def update(self, deltaTime):
+        now = pygame.time.get_ticks()
+        elapsed = now - self.spawn_time
+        
+        # Animation frame update
+        if self.lastframetick + 1000/12 <= pygame.time.get_ticks():  # 12 FPS animation
+            self.currentframe += 1
+            self.lastframetick = pygame.time.get_ticks()
+            if self.currentframe >= len(self.frames):
+                self.currentframe = 0
+        
+        self.image = self.frames[self.currentframe]
+        self.rect = self.image.get_rect(center=self.position)
+        
+        # Check if powerup has expired
+        if elapsed >= self.duration:
+            if self in Powerup.powerups:
+                Powerup.powerups.remove(self)
+    
+    def draw(self, surface):
+        now = pygame.time.get_ticks()
+        elapsed = now - self.spawn_time
+        
+        # Flash warning in last 5 seconds (flashing every 200ms)
+        if elapsed >= 15000:  # Last 5 seconds
+            if ((now // 200) % 2 == 0):
+                # Draw flashing effect
+                alpha = 255 if ((now // 100) % 2 == 0) else 128
+                flash_surf = self.image.copy()
+                flash_surf.set_alpha(alpha)
+                surface.blit(flash_surf, self.rect.topleft)
+            else:
+                surface.blit(self.image, self.rect.topleft)
+        else:
+            surface.blit(self.image, self.rect.topleft)
+
 
 class Bullet():
     bullets = []
@@ -379,6 +496,7 @@ class Bullet():
             if self in Bullet.bullets:
                 Bullet.bullets.remove(self)
 
+
 class TrackingMissile(Bullet):
     def __init__(self, x, y, speed, frames, lifetime=3000):
         super().__init__(x, y, 0, frames, is_enemy=True)
@@ -386,7 +504,7 @@ class TrackingMissile(Bullet):
         self.spawn_time = pygame.time.get_ticks()
         self.lifetime = lifetime
         self.state = "alive" 
-        self.hp = 2
+        self.hp = 10  # Explicit Boss parameters assignment override
         
         self.original_frames = [f.copy() for f in frames]
         global universal_explosion_frames 
@@ -404,7 +522,6 @@ class TrackingMissile(Bullet):
     def update(self, deltaTime):
         now = pygame.time.get_ticks()
 
-        # Handle Explosion State
         if self.state == "dying":
             if self.lastframetick + 1000/24 <= pygame.time.get_ticks():
                 self.currentframe += 1
@@ -420,7 +537,6 @@ class TrackingMissile(Bullet):
             screen.blit(self.image, self.rect.topleft)
             return
 
-        # Alive State Logic
         if now - self.spawn_time > self.lifetime:
             self.explode() 
             return
@@ -464,8 +580,359 @@ class TrackingMissile(Bullet):
             if self in Bullet.bullets:
                 Bullet.bullets.remove(self)
 
+
+# ---- MODULAR MULTI-HITBOX BOSS SYSTEM ----
+class VisualExplosionParticle:
+    """Standalone particle logic to decouple rendering loops from main lists."""
+    def __init__(self, center_pos, frames, scale=1.0):
+        self.center = center_pos
+        self.frames = []
+        for f in frames:
+            if scale != 1.0:
+                sz = f.get_size()
+                self.frames.append(pygame.transform.scale(f, (int(sz[0]*scale), int(sz[1]*scale))))
+            else:
+                self.frames.append(f)
+        self.current_frame = 0
+        self.last_tick = pygame.time.get_ticks()
+        self.finished = False
+
+    def update(self):
+        if pygame.time.get_ticks() - self.last_tick > 1000 / 24:
+            self.last_tick = pygame.time.get_ticks()
+            self.current_frame += 1
+            if self.current_frame >= len(self.frames):
+                self.finished = True
+
+    def draw(self, surface):
+        if not self.finished:
+            img = self.frames[self.current_frame]
+            rect = img.get_rect(center=self.center)
+            surface.blit(img, rect.topleft)
+
+
+class BossComponent:
+    def __init__(self, alive_img, dead_img, offset_x, offset_y, hp):
+        # Scale every component image up by 50% (2x)
+        self.alive_img = pygame.transform.scale(alive_img, (int(alive_img.get_width() * 2), int(alive_img.get_height() * 2)))
+        self.dead_img = pygame.transform.scale(dead_img, (int(dead_img.get_width() * 2), int(dead_img.get_height() * 2)))
+        self.image = self.alive_img
+        # Scale the offsets by 2 to match the larger structural footprint
+        self.offset = Vector2(offset_x * 2, offset_y * 2)
+        self.hp = hp
+        self.max_hp = hp
+        self.is_dead = False
+        self.rect = self.image.get_rect()
+        
+        self.is_flashing = False
+        self.flash_start = 0
+
+    def take_damage(self, amt):
+        if self.is_dead: return
+        self.hp -= amt
+        self.is_flashing = True
+        self.flash_start = pygame.time.get_ticks()
+        if self.hp <= 0:
+            self.is_dead = True
+            self.image = self.dead_img
+            global boss_explosions, universal_explosion_frames
+            boss_explosions.append(VisualExplosionParticle(self.rect.center, universal_explosion_frames, scale=1.0))
+
+    def update(self, boss_center, player_center, dt, can_fire=True):
+        self.rect.center = boss_center + self.offset
+        if pygame.time.get_ticks() - self.flash_start > 100:
+            self.is_flashing = False
+
+    def draw(self, surface):
+        if self.is_flashing and not self.is_dead:
+            mask = pygame.mask.from_surface(self.image)
+            white_surf = mask.to_surface(setcolor=(255, 255, 255, 255), unsetcolor=(0, 0, 0, 0))
+            surface.blit(white_surf, self.rect.topleft)
+        else:
+            surface.blit(self.image, self.rect.topleft)
+
+
+class BossTrackingGun(BossComponent):
+    """BossGun1 Logic: Always handles rotation/tracking. Fires 5 targeting missiles."""
+    def __init__(self, alive_img, dead_img, offset_x, offset_y, hp):
+        super().__init__(alive_img, dead_img, offset_x, offset_y, hp)
+        self.last_shot = pygame.time.get_ticks()
+        self.shot_interval = 20000 
+
+    def update(self, boss_center, player_center, dt, can_fire=True):
+        super().update(boss_center, player_center, dt, can_fire)
+        if not self.is_dead:
+            dx = player_center.x - self.rect.centerx
+            dy = player_center.y - self.rect.centery
+            angle = math.degrees(math.atan2(-dy, dx)) - 90
+            self.image = pygame.transform.rotate(self.alive_img, angle)
+            self.rect = self.image.get_rect(center=self.rect.center)
+
+            now = pygame.time.get_ticks()
+            if can_fire and now - self.last_shot > self.shot_interval:
+                self.last_shot = now
+                for i in range(5):
+                    TrackingMissile(self.rect.centerx, self.rect.centery, 220, missile_frames, lifetime=5000)
+
+
+class BossBurstGun(BossComponent):
+    """BossGun2 Logic: Rotates and tracks the target. Fires bursts of 4 round shots."""
+    def __init__(self, alive_img, dead_img, offset_x, offset_y, hp):
+        super().__init__(alive_img, dead_img, offset_x, offset_y, hp)
+        self.last_burst = pygame.time.get_ticks()
+        self.burst_interval = 2000
+        self.in_burst = False
+        self.burst_count = 0
+        self.last_shot = 0
+        self.shot_delay = 150
+        self.fire_angle = 180
+
+    def update(self, boss_center, player_center, dt, can_fire=True):
+        super().update(boss_center, player_center, dt, can_fire)
+        if not self.is_dead:
+            dx = player_center.x - self.rect.centerx
+            dy = player_center.y - self.rect.centery
+            angle = math.degrees(math.atan2(-dy, dx)) - 90
+            self.fire_angle = angle
+            self.image = pygame.transform.rotate(self.alive_img, angle)
+            self.rect = self.image.get_rect(center=self.rect.center)
+
+            now = pygame.time.get_ticks()
+            if not self.in_burst and can_fire and now - self.last_burst > self.burst_interval:
+                self.in_burst = True
+                self.burst_count = 0
+                self.last_shot = now
+
+            if self.in_burst and now - self.last_shot > self.shot_delay:
+                self.last_shot = now
+                rads = math.radians(-self.fire_angle + 90)
+                bx = math.cos(rads) * 250
+                by = -math.sin(rads) * 250
+                Bullet(self.rect.centerx, self.rect.centery, by, bulletframes, is_enemy=True, speed_x=-bx, angle=self.fire_angle)
+                self.burst_count += 1
+                if self.burst_count >= 3:
+                    self.in_burst = False
+                    self.last_burst = now
+
+
+class BossSpreadGun(BossComponent):
+    """BossGun3 Logic: Static side components firing spreads of 7 rounds."""
+    def __init__(self, alive_img, dead_img, offset_x, offset_y, hp, flip_x=False):
+        if flip_x:
+            alive_img = pygame.transform.flip(alive_img, True, False)
+            dead_img = pygame.transform.flip(dead_img, True, False)
+        super().__init__(alive_img, dead_img, offset_x, offset_y, hp)
+        self.last_burst = pygame.time.get_ticks()
+        self.burst_interval = 3500
+        self.in_burst = False
+        self.burst_count = 0
+        self.last_shot = 0
+        self.shot_delay = 120
+        self.flip_x = flip_x
+
+    def update(self, boss_center, player_center, dt, can_fire=True):
+        super().update(boss_center, player_center, dt, can_fire)
+        if not self.is_dead:
+            now = pygame.time.get_ticks()
+            if not self.in_burst and can_fire and now - self.last_burst > self.burst_interval:
+                self.in_burst = True
+                self.burst_count = 0
+                self.last_shot = now
+
+            if self.in_burst and now - self.last_shot > self.shot_delay:
+                self.last_shot = now
+                base_angle = 135 if not self.flip_x else 225
+                for offset_deg in [-30, -15, 0, 15, 30]:
+                    final_angle = base_angle + offset_deg
+                    rads = math.radians(-final_angle + 90)
+                    bx = math.cos(rads) * 200
+                    by = -math.sin(rads) * 200
+                    
+                    bx = -bx
+                    final_angle = -final_angle
+                    
+                    Bullet(self.rect.centerx, self.rect.centery, by, bulletframes, is_enemy=True, speed_x=-bx, angle=final_angle)
+                
+                self.burst_count += 1
+                if self.burst_count >= 5:
+                    self.in_burst = False
+                    self.last_burst = now
+
+
+class MasterBossFight:
+    def __init__(self):
+        self.position = Vector2(540, 850) 
+        self.hp = 150
+        self.max_hp = 150
+        self.state = "entering"  
+        self.timer = 0
+        self.components = []
+        
+        self.visual_img = pygame.transform.scale(boss_main_sprite, (int(boss_main_sprite.get_width() * 2), int(boss_main_sprite.get_height() * 2)))
+        self.hitbox_img = pygame.transform.scale(boss_hitbox_sprite, (int(boss_hitbox_sprite.get_width() * 2), int(boss_hitbox_sprite.get_height() * 2)))
+        self.rect = self.visual_img.get_rect()
+        self.hitbox_rect = self.hitbox_img.get_rect()
+        
+        self.is_flashing = False
+        self.flash_start = 0
+        
+        self.death_interval_timer = 0
+        self.death_glide_speed = -100
+
+        # ---- LAYER REORDERING ----
+        # Appending the SpreadGuns (Gun3) FIRST so they render BEHIND/UNDER BossTrackingGun (Gun1)
+        self.components.append(BossSpreadGun(boss_gun3_img, boss_gun3_dead_img, 20, 15, 20, flip_x=False)) # Right Side Spread
+        self.components.append(BossSpreadGun(boss_gun3_img, boss_gun3_dead_img, -20, 15, 20, flip_x=True))  # Left Side Spread
+        
+        # Now adding the rest of the guns so they appear on higher visual layers
+        self.components.append(BossTrackingGun(boss_gun1_img, boss_gun1_dead_img, 0, -20, 15)) # Central Tracking Gun
+        self.components.append(BossBurstGun(boss_gun2_img, boss_gun2_dead_img, -160, -14, 10))  # Left Wing
+        self.components.append(BossBurstGun(boss_gun2_img, boss_gun2_dead_img, 160, -14, 10))   # Right Wing
+        self.components.append(BossBurstGun(boss_gun2_img, boss_gun2_dead_img, -30, 70, 10))    # Left Tail
+        self.components.append(BossBurstGun(boss_gun2_img, boss_gun2_dead_img, 30, 70, 10))     # Right Tail
+
+    def take_damage(self, amt):
+        if self.state in ["dying", "dead"]: return
+        self.hp -= amt
+        self.is_flashing = True
+        self.flash_start = pygame.time.get_ticks()
+        
+        if self.hp <= 0:
+            self.state = "dying"
+            self.death_interval_timer = pygame.time.get_ticks()
+            
+            # ---- INSTANT COMPONENT DEATH TRIGGERS ----
+            # Forces all surviving components to immediately switch to their death states/animations
+            for comp in self.components:
+                if not comp.is_dead:
+                    comp.take_damage(comp.hp) # Deals damage equal to remaining health to cleanly trigger internal explosion rules
+
+    def update(self, dt):
+        now = pygame.time.get_ticks()
+        player_center = Vector2(position.x + player_rect.width/2, position.y + player_rect.height/2)
+        
+        if pygame.time.get_ticks() - self.flash_start > 100:
+            self.is_flashing = False
+
+        if self.state == "entering":
+            self.position.y -= 150 * dt
+            if self.position.y <= 360:
+                self.position.y = 360
+                self.state = "hovering"
+                self.timer = now
+
+        elif self.state == "hovering":
+            if now - self.timer > 150000: 
+                self.state = "leaving"
+
+        elif self.state == "leaving":
+            self.position.y -= 120 * dt
+            if self.position.y < -300:
+                self.state = "dead"
+
+        elif self.state == "dying":
+            self.position.x += self.death_glide_speed * dt
+            
+            if now - self.death_interval_timer > 1000:
+                self.death_interval_timer = now
+                global boss_explosions, universal_explosion_frames
+                boss_explosions.append(VisualExplosionParticle(self.rect.center, universal_explosion_frames, scale=3.5))
+                for _ in range(5):
+                    rx = self.rect.centerx + random.randint(-250, 250)
+                    ry = self.rect.centery + random.randint(-20, 20)
+                    boss_explosions.append(VisualExplosionParticle((rx, ry), universal_explosion_frames, scale=2.5))
+            
+            if self.position.x < -400:
+                self.state = "dead"
+
+        self.rect.center = (int(self.position.x), int(self.position.y))
+        self.hitbox_rect.center = self.rect.center
+
+        can_fire = (self.state == "hovering")
+        for comp in self.components:
+            comp.update(self.position, player_center, dt, can_fire)
+
+    def draw(self, surface):
+        if self.is_flashing:
+            mask = pygame.mask.from_surface(self.visual_img)
+            white_surf = mask.to_surface(setcolor=(255, 255, 255, 255), unsetcolor=(0, 0, 0, 0))
+            surface.blit(white_surf, self.rect.topleft)
+        else:
+            surface.blit(self.visual_img, self.rect.topleft)
+
+        for comp in self.components:
+            comp.draw(surface)
+
+
+class GamePhaseManager:
+    def __init__(self):
+        self.phase = "WAVE"  
+        self.game_start_time = pygame.time.get_ticks()
+        self.clearing_timer = 0
+        self.boss = None
+
+    def update(self, dt):
+        now = pygame.time.get_ticks()
+        
+        if self.phase == "WAVE":
+            if now - self.game_start_time > 300000:  
+                self.trigger_boss_sequence()
+
+        elif self.phase == "CLEARING":
+            if now - self.clearing_timer > 5000:     
+                self.phase = "BOSS"
+                self.boss = MasterBossFight()
+
+        elif self.phase == "BOSS":
+            if self.boss:
+                self.boss.update(dt)
+                if self.boss.state == "dead":
+                    self.boss = None
+                    self.clearing_timer = now
+                    self.phase = "POST_BOSS_GAP"
+                    
+        elif self.phase == "POST_BOSS_GAP":
+            if pygame.time.get_ticks() - self.clearing_timer > 5000: 
+                self.phase = "WAVE"
+                self.game_start_time = pygame.time.get_ticks()
+
+    def trigger_boss_sequence(self):
+        if self.phase == "WAVE":
+            self.phase = "CLEARING"
+            self.clearing_timer = pygame.time.get_ticks()
+            Enemy.enemies.clear() 
+
+
+# ---- SYSTEM DECLARATIONS ----
+phase_manager = GamePhaseManager()
+boss_explosions = []
+
 shoot_delay = 100 
 last_shot = pygame.time.get_ticks()
+
+def activate_powerup(powerup_type):
+    """Activate the specified powerup effect"""
+    global double_points_active, double_points_start, insta_kill_active, insta_kill_start, player_lives
+    
+    if powerup_type == "DoublePoints":
+        double_points_active = True
+        double_points_start = pygame.time.get_ticks()
+    elif powerup_type == "Heal":
+        player_lives = 20
+    elif powerup_type == "InstaKill":
+        insta_kill_active = True
+        insta_kill_start = pygame.time.get_ticks()
+
+def update_powerup_timers():
+    """Update powerup durations and deactivate expired ones"""
+    global double_points_active, insta_kill_active
+    now = pygame.time.get_ticks()
+    
+    if double_points_active and now - double_points_start > double_points_duration:
+        double_points_active = False
+    
+    if insta_kill_active and now - insta_kill_start > insta_kill_duration:
+        insta_kill_active = False
 
 def shoot(spawn_pos):
     global last_shot
@@ -477,9 +944,7 @@ def shoot(spawn_pos):
         Bullet(spawn_pos.x+16, spawn_pos.y, -400, bulletframes, is_enemy=False)
         Bullet(spawn_pos.x+8, spawn_pos.y, -400, bulletframes, is_enemy=False)
 
-# ---- MODULAR SPAWNING HELPERS ----
 def spawn_enemy(e_type, x, y):
-    """Helper to instantiate enemies cleanly."""
     if e_type == "E1":
         Enemy(x, y, 100, enemy1_frames, explosion_frames, hp=1, shoot_delay=4000, enemy_type="E1")
     elif e_type == "E2":
@@ -490,74 +955,335 @@ def spawn_enemy(e_type, x, y):
         Enemy(x, y, 150, enemy4_frames, explosion_frames, hp=3, shoot_delay=1000, enemy_type="E4")
 
 def get_formation_offsets(form_type, size):
-    """Returns a list of (x_offset, y_offset) relative to a formation's base coordinate."""
     offsets = []
     spacing = 50
-    
     if form_type == "horizontal":
         start_x = -((size - 1) * spacing) / 2
-        for i in range(size):
-            offsets.append((start_x + i * spacing, 0))
-            
+        for i in range(size): offsets.append((start_x + i * spacing, 0))
     elif form_type == "vertical":
-        for i in range(size):
-            offsets.append((0, -i * spacing))
-            
+        for i in range(size): offsets.append((0, -i * spacing))
     elif form_type == "v_shape":
-        offsets.append((0, 0)) # Leader at front
+        offsets.append((0, 0))
         for i in range(1, size):
             side = -1 if i % 2 != 0 else 1
             row = (i + 1) // 2
             offsets.append((side * row * spacing, -row * spacing))
-            
     elif form_type == "half_v":
-        side = random.choice([-1, 1]) # Slant left or slant right
-        for i in range(size):
-            offsets.append((side * i * spacing, -i * spacing))
-            
+        side = random.choice([-1, 1])
+        for i in range(size): offsets.append((side * i * spacing, -i * spacing))
     return offsets
 
-# Spawning Timers
 enemy_spawn_timer = pygame.time.get_ticks()
 enemy_spawn_delay = 1500 
-
 formation_spawn_timer = pygame.time.get_ticks()
 formation_spawn_delay = random.randint(8000, 15000) 
-
 special_enemy_spawn_timer = pygame.time.get_ticks()
 special_enemy_spawn_delay = random.randint(10000, 18000) 
 
-# ---- MAIN GAME LOOP ----
+
+# ---- MODULAR UI SYSTEM ----
+class UIButton:
+    """Modular UI Button with customizable styling"""
+    def __init__(self, text, x, y, width, height, font, 
+                 button_color=(50, 100, 180), border_color=(255, 255, 255), 
+                 border_width=3, text_color=(255, 255, 255)):
+        self.text = text
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.font = font
+        self.button_color = button_color
+        self.border_color = border_color
+        self.border_width = border_width
+        self.text_color = text_color
+        self.is_selected = False
+        self.rect = pygame.Rect(x, y, width, height)
+    
+    def update_position(self, x, y):
+        """Update button position"""
+        self.x = x
+        self.y = y
+        self.rect = pygame.Rect(x, y, self.width, self.height)
+    
+    def draw(self, surface):
+        """Draw button with selection highlighting"""
+        # Draw button background
+        pygame.draw.rect(surface, self.button_color, self.rect)
+        
+        # Draw border (thicker if selected)
+        border = self.border_width * 2 if self.is_selected else self.border_width
+        pygame.draw.rect(surface, self.border_color, self.rect, border)
+        
+        # Draw text
+        text_surface = self.font.render(self.text, True, self.text_color)
+        text_rect = text_surface.get_rect(center=self.rect.center)
+        surface.blit(text_surface, text_rect)
+    
+    def is_hovered(self, pos):
+        """Check if mouse is hovering over button"""
+        return self.rect.collidepoint(pos)
+
+
+class Menu:
+    """Modular Menu System for navigation"""
+    def __init__(self, title, buttons, title_font=font_large):
+        self.title = title
+        self.buttons = buttons
+        self.current_selection = 0
+        self.title_font = title_font
+        self.update_selection()
+    
+    def update_selection(self):
+        """Update button selection states"""
+        for i, button in enumerate(self.buttons):
+            button.is_selected = (i == self.current_selection)
+    
+    def navigate_up(self):
+        """Navigate to previous button"""
+        self.current_selection = (self.current_selection - 1) % len(self.buttons)
+        self.update_selection()
+    
+    def navigate_down(self):
+        """Navigate to next button"""
+        self.current_selection = (self.current_selection + 1) % len(self.buttons)
+        self.update_selection()
+    
+    def select_current(self):
+        """Return the currently selected button's action"""
+        return self.buttons[self.current_selection].text
+    
+    def draw(self, surface):
+        """Draw menu with title and buttons"""
+        # Draw title
+        title_surface = self.title_font.render(self.title, True, (255, 255, 255))
+        title_rect = title_surface.get_rect(center=(540, 80))
+        surface.blit(title_surface, title_rect)
+        
+        # Draw buttons
+        for button in self.buttons:
+            button.draw(surface)
+
+
+# ---- GAME STATE MANAGEMENT ----
+class GameState:
+    """Manages different game states"""
+    MAIN_MENU = "main_menu"
+    PLAYING = "playing"
+    PAUSED = "paused"
+    CONTROLS = "controls"
+    CREDITS = "credits"
+
+current_state = GameState.MAIN_MENU
+previous_state = GameState.MAIN_MENU
+
+
+# ---- MENU CREATION ----
+def create_main_menu():
+    """Create main menu"""
+    buttons = [
+        UIButton("PLAY", 340, 250, 400, 80, font_large, 
+                button_color=(50, 150, 50), border_color=(100, 255, 100)),
+        UIButton("CONTROLS", 340, 370, 400, 80, font_large,
+                button_color=(100, 100, 180), border_color=(150, 150, 255)),
+        UIButton("CREDITS", 340, 490, 400, 80, font_large,
+                button_color=(150, 100, 50), border_color=(255, 180, 100))
+    ]
+    return Menu("UNNAMED PLANE GAME", buttons, font_huge)
+
+
+def create_controls_menu():
+    """Create controls menu"""
+    buttons = [
+        UIButton("BACK", 340, 550, 400, 80, font_large,
+                button_color=(100, 50, 50), border_color=(255, 100, 100))
+    ]
+    menu = Menu("CONTROLS", buttons, font_huge)
+    menu.controls_text = [
+        "WASD / ARROW KEYS - MOVE",
+        "SPACE - SHOOT",
+        "B - SKIP TO BOSS (JUST FOR TESTERS)",
+        "ESC - PAUSE GAME",
+        "ARROW KEYS / WASD - NAVIGATE MENUS"
+    ]
+    return menu
+
+
+def create_credits_menu():
+    """Create credits menu"""
+    buttons = [
+        UIButton("BACK", 340, 550, 400, 80, font_large,
+                button_color=(100, 50, 50), border_color=(255, 100, 100))
+    ]
+    menu = Menu("CREDITS", buttons, font_huge)
+    menu.credits_text = [
+        "GAME DESIGN & DEVELOPMENT",
+        "[Placeholder]",
+        "",
+        "GRAPHICS & ASSETS",
+        "[Placeholder]",
+        "",
+        "MUSIC & SOUND DESIGN",
+        "[Placeholder]",
+        "",
+        "TESTERS"
+        "[Placeholder]"
+    ]
+    return menu
+
+
+def create_pause_menu():
+    """Create pause menu"""
+    buttons = [
+        UIButton("RESUME", 340, 250, 400, 80, font_large,
+                button_color=(50, 150, 50), border_color=(100, 255, 100)),
+        UIButton("RESTART", 340, 370, 400, 80, font_large,
+                button_color=(150, 100, 50), border_color=(255, 180, 100)),
+        UIButton("MAIN MENU", 340, 490, 400, 80, font_large,
+                button_color=(100, 50, 50), border_color=(255, 100, 100))
+    ]
+    return Menu("PAUSED", buttons, font_huge)
+
+
+# Initialize menus
+main_menu = create_main_menu()
+controls_menu = create_controls_menu()
+credits_menu = create_credits_menu()
+pause_menu = create_pause_menu()
 while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
         
         if event.type == pygame.KEYDOWN:
-            if game_over:
-                if event.key == pygame.K_SPACE:
-                    game_over = False
-                    player_lives = 3
-                    score = 0
-                    position = Vector2(590, 360)
-                    player_invulnerable = False
-                    leftHeld = rightHeld = upHeld = False
-                    downHeld = False
+            # Menu navigation keys
+            if current_state in [GameState.MAIN_MENU, GameState.CONTROLS, GameState.CREDITS]:
+                if event.key in [pygame.K_UP, pygame.K_w]:
+                    if current_state == GameState.MAIN_MENU:
+                        main_menu.navigate_up()
+                    elif current_state == GameState.CONTROLS:
+                        controls_menu.navigate_up()
+                    elif current_state == GameState.CREDITS:
+                        credits_menu.navigate_up()
+                
+                elif event.key in [pygame.K_DOWN, pygame.K_s]:
+                    if current_state == GameState.MAIN_MENU:
+                        main_menu.navigate_down()
+                    elif current_state == GameState.CONTROLS:
+                        controls_menu.navigate_down()
+                    elif current_state == GameState.CREDITS:
+                        credits_menu.navigate_down()
+                
+                elif event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
+                    if current_state == GameState.MAIN_MENU:
+                        selection = main_menu.select_current()
+                        if selection == "PLAY":
+                            current_state = GameState.PLAYING
+                            game_over = False
+                            player_lives = 20
+                            score = 0
+                            kill_count = 0
+                            double_points_active = False
+                            insta_kill_active = False
+                            position = Vector2(590, 360)
+                            player_invulnerable = False
+                            leftHeld = rightHeld = upHeld = downHeld = False
+                            Enemy.enemies.clear()
+                            Bullet.bullets.clear()
+                            TrailParticle.particles.clear()
+                            Powerup.powerups.clear()
+                            boss_explosions.clear()
+                            phase_manager = GamePhaseManager()
+                            now = pygame.time.get_ticks()
+                            enemy_spawn_timer = now
+                            formation_spawn_timer = now
+                            special_enemy_spawn_timer = now
+                        elif selection == "CONTROLS":
+                            current_state = GameState.CONTROLS
+                        elif selection == "CREDITS":
+                            current_state = GameState.CREDITS
                     
-                    Enemy.enemies.clear()
-                    Bullet.bullets.clear()
-                    TrailParticle.particles.clear()
+                    elif current_state == GameState.CONTROLS:
+                        if controls_menu.select_current() == "BACK":
+                            current_state = GameState.MAIN_MENU
                     
-                    now = pygame.time.get_ticks()
-                    enemy_spawn_timer = now
-                    formation_spawn_timer = now
-                    special_enemy_spawn_timer = now
-            else:
+                    elif current_state == GameState.CREDITS:
+                        if credits_menu.select_current() == "BACK":
+                            current_state = GameState.MAIN_MENU
+            
+            # Pause menu navigation
+            elif current_state == GameState.PAUSED:
+                if event.key in [pygame.K_UP, pygame.K_w]:
+                    pause_menu.navigate_up()
+                elif event.key in [pygame.K_DOWN, pygame.K_s]:
+                    pause_menu.navigate_down()
+                elif event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
+                    selection = pause_menu.select_current()
+                    if selection == "RESUME":
+                        current_state = GameState.PLAYING
+                    elif selection == "RESTART":
+                        current_state = GameState.PLAYING
+                        game_over = False
+                        player_lives = 20
+                        score = 0
+                        kill_count = 0
+                        double_points_active = False
+                        insta_kill_active = False
+                        position = Vector2(590, 360)
+                        player_invulnerable = False
+                        leftHeld = rightHeld = upHeld = downHeld = False
+                        Enemy.enemies.clear()
+                        Bullet.bullets.clear()
+                        TrailParticle.particles.clear()
+                        Powerup.powerups.clear()
+                        boss_explosions.clear()
+                        phase_manager = GamePhaseManager()
+                        now = pygame.time.get_ticks()
+                        enemy_spawn_timer = now
+                        formation_spawn_timer = now
+                        special_enemy_spawn_timer = now
+                    elif selection == "MAIN MENU":
+                        current_state = GameState.MAIN_MENU
+                        pause_menu.current_selection = 0
+                        pause_menu.update_selection()
+                        game_over = False
+                        player_lives = 20
+                        score = 0
+                        kill_count = 0
+                        double_points_active = False
+                        insta_kill_active = False
+                        position = Vector2(590, 360)
+                        player_invulnerable = False
+                        leftHeld = rightHeld = upHeld = downHeld = False
+                        Enemy.enemies.clear()
+                        Bullet.bullets.clear()
+                        TrailParticle.particles.clear()
+                        Powerup.powerups.clear()
+                        boss_explosions.clear()
+                        phase_manager = GamePhaseManager()
+            
+            # In-game pause toggle
+            elif current_state == GameState.PLAYING and event.key == pygame.K_ESCAPE:
+                current_state = GameState.PAUSED
+                pause_menu.current_selection = 0
+                pause_menu.update_selection()
+            
+            # Game over screen - return to menu
+            elif current_state == GameState.PLAYING and game_over and (event.key == pygame.K_SPACE or event.key == pygame.K_RETURN):
+                current_state = GameState.MAIN_MENU
+                main_menu.current_selection = 0
+                main_menu.update_selection()
+            
+            # In-game controls
+            elif current_state == GameState.PLAYING:
                 if event.key == pygame.K_LEFT or event.key == pygame.K_a: leftHeld = True
                 if event.key == pygame.K_RIGHT or event.key == pygame.K_d: rightHeld = True
                 if event.key == pygame.K_UP or event.key == pygame.K_w: upHeld = True
                 if event.key == pygame.K_DOWN or event.key == pygame.K_s: downHeld = True
                 
+                if event.key == pygame.K_b:
+                    phase_manager.trigger_boss_sequence()
+
                 if event.key == pygame.K_SPACE:    
                     plane_size = playerplaneframes[playerplanecurrentframe].get_size()
                     center_x = position.x + (plane_size[0] / 2)
@@ -565,13 +1291,13 @@ while running:
                     shoot(Vector2(center_x, center_y))
 
         elif event.type == pygame.KEYUP:
-            if not game_over:
+            if current_state == GameState.PLAYING:
                 if event.key == pygame.K_LEFT or event.key == pygame.K_a: leftHeld = False
                 if event.key == pygame.K_RIGHT or event.key == pygame.K_d: rightHeld = False        
                 if event.key == pygame.K_UP or event.key == pygame.K_w: upHeld = False
                 if event.key == pygame.K_DOWN or event.key == pygame.K_s: downHeld = False
 
-    if not game_over:
+    if current_state == GameState.PLAYING and not game_over:
         if leftHeld: position.x -= speed*deltaTime
         if rightHeld: position.x += speed*deltaTime
         if upHeld: position.y -= speed*deltaTime
@@ -585,103 +1311,110 @@ while running:
         if playerplanelasttick + 1000/24 <= pygame.time.get_ticks():
             playerplanelasttick = pygame.time.get_ticks()
             playerplanecurrentframe += 1
-            if playerplanecurrentframe > len(playerplaneframes) -1:
+            if playerplanecurrentframe > len(playerplaneframes) - 1:
                 playerplanecurrentframe = 0
 
-        # ---- Spawning Framework ----
+        phase_manager.update(deltaTime)
         now = pygame.time.get_ticks()
         
-        # 1. Standard Staggered Enemy Spawning
-        if now - enemy_spawn_timer > enemy_spawn_delay:
-            enemy_spawn_timer = now
-            enemy_type = random.choice(["E1", "E2", "E3", "E4"])
-            x = random.randint(50, 1030)
-            y = -50
-            spawn_enemy(enemy_type, x, y)
-            
-        # 2. Modular Formation Spawning
-        if now - formation_spawn_timer > formation_spawn_delay:
-            formation_spawn_timer = now
-            formation_spawn_delay = random.randint(8000, 15000) 
-            
-            form_type = random.choice(["horizontal", "vertical", "v_shape", "half_v"])
-            size = random.randint(3, 7)
-            
-            # Determine formation pool based on requested logic
-            pool_roll = random.random()
-            if pool_roll < 0.90:
-                allowed_types = ["E1", "E2"] 
-            elif pool_roll < 0.95:
-                allowed_types = ["E3"] 
-            else:
-                allowed_types = ["E4"] 
+        if phase_manager.phase == "WAVE":
+            if now - enemy_spawn_timer > enemy_spawn_delay:
+                enemy_spawn_timer = now
+                enemy_type = random.choice(["E1", "E2", "E3", "E4"])
+                x = random.randint(50, 1030)
+                y = -50
+                spawn_enemy(enemy_type, x, y)
                 
-            base_x = random.randint(250, 830) 
-            base_y = -100
-            
-            offsets = get_formation_offsets(form_type, size)
-            for ox, oy in offsets:
-                spawn_x = max(50, min(1030, base_x + ox)) 
-                spawn_y = base_y + oy
-                e_type = random.choice(allowed_types)
-                spawn_enemy(e_type, spawn_x, spawn_y)
+            if now - formation_spawn_timer > formation_spawn_delay:
+                formation_spawn_timer = now
+                formation_spawn_delay = random.randint(8000, 15000) 
+                form_type = random.choice(["horizontal", "vertical", "v_shape", "half_v"])
+                size = random.randint(3, 7)
+                pool_roll = random.random()
+                if pool_roll < 0.90: allowed_types = ["E1", "E2"] 
+                elif pool_roll < 0.95: allowed_types = ["E3"] 
+                else: allowed_types = ["E4"] 
+                    
+                base_x = random.randint(250, 830) 
+                base_y = -100
+                offsets = get_formation_offsets(form_type, size)
+                for ox, oy in offsets:
+                    spawn_x = max(50, min(1030, base_x + ox)) 
+                    spawn_y = base_y + oy
+                    e_type = random.choice(allowed_types)
+                    spawn_enemy(e_type, spawn_x, spawn_y)
 
-        # 3. Special Enemy Spawning (Bosses)
-        if now - special_enemy_spawn_timer > special_enemy_spawn_delay:
-            special_enemy_spawn_timer = now
-            special_enemy_spawn_delay = random.randint(10000, 18000) 
-            special_enemy_type = random.choice(["B1", "B2"]) 
-            random_boss_x = random.randint(100, 980)
+            if now - special_enemy_spawn_timer > special_enemy_spawn_delay:
+                special_enemy_spawn_timer = now
+                special_enemy_spawn_delay = random.randint(10000, 18000) 
+                special_enemy_type = random.choice(["B1", "B2"]) 
+                random_boss_x = random.randint(100, 980)
+                if special_enemy_type == "B1":
+                    SpecialEnemy(random_boss_x, 800, 80, bigenemy_frames, bigenemy_explosion_frames, spinny_blade_frames, 15, 200, 5000)
+                elif special_enemy_type == "B2":
+                    SpecialEnemy(random_boss_x, 800, 110, boatenemy_frames, boatenemy_explosion_frames, spinny_blade_frames, 20, 200, 10000)
 
-            if special_enemy_type == "B1":
-                SpecialEnemy(random_boss_x, 800, 80, bigenemy_frames, bigenemy_explosion_frames, spinny_blade_frames, 15, 200, 5000)
-            elif special_enemy_type == "B2":
-                SpecialEnemy(random_boss_x, 800, 110, boatenemy_frames, boatenemy_explosion_frames, spinny_blade_frames, 20, 200, 10000)
-
-        # ---- Collision Processing Loops ----
+        # ---- COLLISION PROCESSING LOOPS ----
         for bullet in Bullet.bullets[:]:
             if isinstance(bullet, TrackingMissile) and bullet.state != "alive":
                 continue
 
             if not bullet.is_enemy:
-                # 1. Player Bullet vs Enemy Logic
                 for enemy in Enemy.enemies[:]:
                     if enemy.state == "alive" and bullet.rect.colliderect(enemy.rect):
+                        # Apply InstaKill if active
+                        if insta_kill_active:
+                            enemy.hp = 1  # Set to 1 so next damage kills instantly
                         enemy.take_damage(1) 
                         if bullet in Bullet.bullets:
                             Bullet.bullets.remove(bullet)
                         break 
                 
-                # 2. Player Bullet vs Tracking Missile Logic
                 if bullet in Bullet.bullets: 
                     for enemy_bullet in Bullet.bullets[:]:
                         if isinstance(enemy_bullet, TrackingMissile) and enemy_bullet.state == "alive":
                             if bullet.rect.colliderect(enemy_bullet.rect):
                                 enemy_bullet.hp -= 1
-                                if enemy_bullet.hp <= 0:
-                                    enemy_bullet.explode() 
-                                if bullet in Bullet.bullets:
-                                    Bullet.bullets.remove(bullet)
+                                if enemy_bullet.hp <= 0: enemy_bullet.explode() 
+                                if bullet in Bullet.bullets: Bullet.bullets.remove(bullet)
                                 break
+
+                if bullet in Bullet.bullets and phase_manager.phase == "BOSS" and phase_manager.boss:
+                    boss_obj = phase_manager.boss
+                    hit_registered = False
+                    
+                    for comp in boss_obj.components:
+                        if not comp.is_dead and bullet.rect.colliderect(comp.rect):
+                            comp.take_damage(1)
+                            if bullet in Bullet.bullets: Bullet.bullets.remove(bullet)
+                            hit_registered = True
+                            break
+                    
+                    if not hit_registered and boss_obj.state in ["entering", "hovering", "leaving"]:
+                        if bullet.rect.colliderect(boss_obj.hitbox_rect):
+                            boss_obj.take_damage(1)
+                            if bullet in Bullet.bullets: Bullet.bullets.remove(bullet)
             
             elif bullet.is_enemy:
-                # 3. Enemy Bullet/Missile vs Player Logic
                 if not player_invulnerable and bullet.rect.colliderect(player_rect):
                     player_lives -= 1
-                    print(f"Player Hit! Lives remaining: {player_lives}")
-                    
                     player_invulnerable = True
                     player_invulnerable_timer = pygame.time.get_ticks()
                     
-                    if isinstance(bullet, TrackingMissile):
-                        bullet.explode() 
+                    if isinstance(bullet, TrackingMissile): bullet.explode() 
                     else:
-                        if bullet in Bullet.bullets:
-                            Bullet.bullets.remove(bullet)
+                        if bullet in Bullet.bullets: Bullet.bullets.remove(bullet)
                         
                     if player_lives <= 0:
                         player_lives = 0  
                         game_over = True
+        
+        # ---- POWERUP COLLISION DETECTION ----
+        for powerup in Powerup.powerups[:]:
+            if powerup.rect.colliderect(player_rect):
+                activate_powerup(powerup.powerup_type)
+                if powerup in Powerup.powerups:
+                    Powerup.powerups.remove(powerup)
 
     # ---- RENDERING ENGINE ----
     screen.fill((20, 40, 80))
@@ -691,55 +1424,123 @@ while running:
         ocean_anim_timer = now
         ocean_current_frame = (ocean_current_frame + 1) % len(ocean_frames)
 
-    if not game_over:
+    if current_state == GameState.PLAYING:
         ocean_scroll_y += ocean_scroll_speed * deltaTime
-        if ocean_scroll_y >= 64:
-            ocean_scroll_y -= 64 
+        if ocean_scroll_y >= 64: ocean_scroll_y -= 64 
             
     screen_w, screen_h = screen.get_size()
     for x in range(0, screen_w + 64, 64):
         for y in range(-64, screen_h + 64, 64):
             screen.blit(ocean_frames[ocean_current_frame], (x, y + int(ocean_scroll_y)))
 
-    for particle in TrailParticle.particles[:]:
-        particle.update(deltaTime if not game_over else 0)
-        particle.draw(screen)
+    # Render game state specific content
+    if current_state == GameState.MAIN_MENU:
+        main_menu.draw(screen)
+    
+    elif current_state == GameState.CONTROLS:
+        controls_menu.draw(screen)
+        # Draw controls text
+        control_y = 200
+        for line in controls_menu.controls_text:
+            control_surf = font_small.render(line, True, (200, 200, 200))
+            screen.blit(control_surf, (150, control_y))
+            control_y += 40
+    
+    elif current_state == GameState.CREDITS:
+        credits_menu.draw(screen)
+        # Draw credits text
+        credit_y = 200
+        for line in credits_menu.credits_text:
+            if line == "":
+                credit_y += 20
+            else:
+                credit_surf = font_small.render(line, True, (200, 200, 200))
+                screen.blit(credit_surf, (150, credit_y))
+                credit_y += 30
+    
+    elif current_state == GameState.PLAYING:
+        # Draw game elements
+        for particle in TrailParticle.particles[:]:
+            particle.update(deltaTime if not game_over else 0)
+            particle.draw(screen)
 
-    for bullet in Bullet.bullets[:]:
-        bullet.update(deltaTime if not game_over else 0)
+        for bullet in Bullet.bullets[:]:
+            bullet.update(deltaTime if not game_over else 0)
 
-    for enemy in Enemy.enemies[:]:
-        enemy.update(deltaTime if not game_over else 0)
-
-    # ---- Player Display ----
-    if not game_over:
-        if player_invulnerable:
-            if now - player_invulnerable_timer > invulnerability_duration:
-                player_invulnerable = False
-            if (now // 100) % 2 == 0:
-                screen.blit(playerplaneframes[playerplanecurrentframe], position)
-        else:
-            screen.blit(playerplaneframes[playerplanecurrentframe], position)
-
-    # ---- DRAW TEXT ON SCREEN (HUD) ----
-    score_surface = ui_font.render(f"SCORE: {score}", True, (255, 255, 255))
-    screen.blit(score_surface, (20, 20))
-
-    lives_surface = ui_font.render(f"LIVES: {player_lives}", True, (255, 255, 255))
-    lives_rect = lives_surface.get_rect(topright=(1060, 20))
-    screen.blit(lives_surface, lives_rect)
-
-    # ---- DEAD STATE INTERACTION ----
-    if game_over:
-        death_surface = game_over_font.render("YOU DIED", True, (200, 30, 30))
-        death_rect = death_surface.get_rect(center=(1080 // 2, 720 // 2 - 40))
-        screen.blit(death_surface, death_rect)
+        for enemy in Enemy.enemies[:]:
+            enemy.update(deltaTime if not game_over else 0)
         
-        restart_surface = ui_font.render("PRESS SPACE TO RESTART", True, (255, 255, 255))
-        restart_rect = restart_surface.get_rect(center=(1080 // 2, 720 // 2 + 40))
-        screen.blit(restart_surface, restart_rect)
+        # Update and draw powerups
+        for powerup in Powerup.powerups[:]:
+            powerup.update(deltaTime if not game_over else 0)
+            powerup.draw(screen)
+        
+        # Update powerup timers
+        update_powerup_timers()
 
-    # ---- VIRTUAL CANVAS SCALING ENGINE ----
+        if phase_manager.phase == "BOSS" and phase_manager.boss:
+            phase_manager.boss.draw(screen)
+
+        for exp in boss_explosions[:]:
+            exp.update()
+            exp.draw(screen)
+            if exp.finished: boss_explosions.remove(exp)
+
+        if not game_over:
+            if player_invulnerable:
+                if now - player_invulnerable_timer > invulnerability_duration:
+                    player_invulnerable = False
+                if (now // 100) % 2 == 0:
+                    screen.blit(playerplaneframes[playerplanecurrentframe], position)
+            else:
+                screen.blit(playerplaneframes[playerplanecurrentframe], position)
+
+        # Draw HUD
+        score_surface = font_medium.render(f"SCORE: {score}", True, (255, 255, 255))
+        screen.blit(score_surface, (20, 20))
+
+        lives_surface = font_medium.render(f"LIVES: {player_lives}", True, (255, 255, 255))
+        lives_rect = lives_surface.get_rect(topright=(1060, 20))
+        screen.blit(lives_surface, lives_rect)
+        
+        # Display active powerups
+        powerup_y = 60
+        if double_points_active:
+            time_remaining = max(0, double_points_duration - (now - double_points_start)) // 1000
+            double_points_surface = font_medium.render(f"2x POINTS: {time_remaining}s", True, (255, 200, 0))
+            screen.blit(double_points_surface, (20, powerup_y))
+            powerup_y += 40
+        
+        if insta_kill_active:
+            time_remaining = max(0, insta_kill_duration - (now - insta_kill_start)) // 1000
+            insta_kill_surface = font_medium.render(f"INSTA KILL: {time_remaining}s", True, (255, 0, 0))
+            screen.blit(insta_kill_surface, (20, powerup_y))
+        
+        # Display kill count
+        kill_count_surface = font_medium.render(f"KILLS: {kill_count}", True, (200, 200, 200))
+        screen.blit(kill_count_surface, (20, 680))
+
+        if phase_manager.phase == "WAVE":
+            hint_surf = font_small.render("PRESS 'B' TO SKIP TO BOSS", True, (200, 200, 200))
+            screen.blit(hint_surf, (350, 680))
+        
+        # Show pause hint
+        pause_hint = font_small.render("PRESS ESC TO PAUSE", True, (150, 150, 150))
+        screen.blit(pause_hint, (800, 680))
+        
+        # Game over screen
+        if game_over:
+            death_surface = font_huge.render("YOU DIED", True, (200, 30, 30))
+            death_rect = death_surface.get_rect(center=(540, 300))
+            screen.blit(death_surface, death_rect)
+            
+            restart_surface = font_large.render("PRESS SPACE TO RETURN TO MENU", True, (255, 255, 255))
+            restart_rect = restart_surface.get_rect(center=(540, 400))
+            screen.blit(restart_surface, restart_rect)
+    
+    elif current_state == GameState.PAUSED:
+        pause_menu.draw(screen)
+
     window_w, window_h = window.get_size()
     game_ratio = 1080 / 720
     window_ratio = window_w / window_h
@@ -755,7 +1556,6 @@ while running:
     y_offset = (window_h - new_h) // 2
 
     window.fill((0, 0, 0))
-
     scaled_screen = pygame.transform.scale(screen, (new_w, new_h))
     window.blit(scaled_screen, (x_offset, y_offset))
 
