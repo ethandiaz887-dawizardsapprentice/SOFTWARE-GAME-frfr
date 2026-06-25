@@ -781,15 +781,19 @@ class MasterBossFight:
 
         # ---- LAYER REORDERING ----
         # Appending the SpreadGuns (Gun3) FIRST so they render BEHIND/UNDER BossTrackingGun (Gun1)
-        self.components.append(BossSpreadGun(boss_gun3_img, boss_gun3_dead_img, 20, 15, 20, flip_x=False)) # Right Side Spread
-        self.components.append(BossSpreadGun(boss_gun3_img, boss_gun3_dead_img, -20, 15, 20, flip_x=True))  # Left Side Spread
+        self.components.append(BossSpreadGun(boss_gun3_img, boss_gun3_dead_img, 20, 15, 45, flip_x=False)) # Right Side Spread
+        self.components.append(BossSpreadGun(boss_gun3_img, boss_gun3_dead_img, -20, 15, 45, flip_x=True))  # Left Side Spread
         
         # Now adding the rest of the guns so they appear on higher visual layers
-        self.components.append(BossTrackingGun(boss_gun1_img, boss_gun1_dead_img, 0, -20, 15)) # Central Tracking Gun
-        self.components.append(BossBurstGun(boss_gun2_img, boss_gun2_dead_img, -160, -14, 10))  # Left Wing
-        self.components.append(BossBurstGun(boss_gun2_img, boss_gun2_dead_img, 160, -14, 10))   # Right Wing
-        self.components.append(BossBurstGun(boss_gun2_img, boss_gun2_dead_img, -30, 70, 10))    # Left Tail
-        self.components.append(BossBurstGun(boss_gun2_img, boss_gun2_dead_img, 30, 70, 10))     # Right Tail
+        self.components.append(BossTrackingGun(boss_gun1_img, boss_gun1_dead_img, 0, -20, 30)) # Central Tracking Gun
+        self.components.append(BossBurstGun(boss_gun2_img, boss_gun2_dead_img, -160, -14, 30))  # Left Wing
+        self.components.append(BossBurstGun(boss_gun2_img, boss_gun2_dead_img, -100, -9, 30))  # Left Wing
+
+        self.components.append(BossBurstGun(boss_gun2_img, boss_gun2_dead_img, 160, -14, 30))   # Right Wing
+        self.components.append(BossBurstGun(boss_gun2_img, boss_gun2_dead_img, 100, -9, 30))   # Right Wing
+
+        self.components.append(BossBurstGun(boss_gun2_img, boss_gun2_dead_img, -30, 70, 30))    # Left Tail
+        self.components.append(BossBurstGun(boss_gun2_img, boss_gun2_dead_img, 30, 70, 30))     # Right Tail
 
     def take_damage(self, amt):
         if self.state in ["dying", "dead"]: return
@@ -836,11 +840,11 @@ class MasterBossFight:
             if now - self.death_interval_timer > 1000:
                 self.death_interval_timer = now
                 global boss_explosions, universal_explosion_frames
-                boss_explosions.append(VisualExplosionParticle(self.rect.center, universal_explosion_frames, scale=3.5))
+                boss_explosions.append(VisualExplosionParticle(self.rect.center, universal_explosion_frames, scale=5))
                 for _ in range(5):
                     rx = self.rect.centerx + random.randint(-250, 250)
                     ry = self.rect.centery + random.randint(-20, 20)
-                    boss_explosions.append(VisualExplosionParticle((rx, ry), universal_explosion_frames, scale=2.5))
+                    boss_explosions.append(VisualExplosionParticle((rx, ry), universal_explosion_frames, scale=3))
             
             if self.position.x < -400:
                 self.state = "dead"
