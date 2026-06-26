@@ -4,10 +4,181 @@ from pygame.math import Vector2
 import random 
 import math
 
+pygame.mixer.pre_init(44100, -16, 2, 512)
 pygame.init()
+pygame.mixer.set_num_channels(32)
 
 root = Path(__file__).resolve().parents[0]
 assets = root / "Assets"
+
+# ---- AUDIO SYSTEM SETUP ----
+class AudioManager:
+    def __init__(self):
+        self.sfx = {}
+        self.music_tracks = {}
+        self.loop_channels = {}
+        self.current_music = None
+        self.queued_music = None
+        self.queued_music_loops = 0
+        self.queued_music_fade_ms = 0
+        self.queued_music_start = 0
+
+    def load_sfx(self, name, filename):
+        path = assets / filename
+        if path.exists():
+            self.sfx[name] = str(path)
+        else:
+            print(f"Sound file '{filename}' not found in Assets.")
+
+    def _get_sound(self, name):
+        path = self.sfx.get(name)
+        if not path:
+            return None
+        try:
+            return pygame.mixer.Sound(path)
+        except pygame.error as exc:
+            print(f"Failed to load sound {name}: {exc}")
+            return None
+
+    def load_music(self, name, filename):
+        path = assets / filename
+        if path.exists():
+            self.music_tracks[name] = str(path)
+        else:
+            print(f"Music file '{filename}' not found in Assets.")
+
+    def play_sound(self, name, volume=0.5):
+        sound = self._get_sound(name)
+        if sound:
+            sound.set_volume(volume)
+            channel = None
+            try:
+                channel = pygame.mixer.find_channel(force=True)
+            except TypeError:
+                channel = pygame.mixer.find_channel()
+                if channel is None:
+                    total_channels = pygame.mixer.get_num_channels()
+                    if total_channels > 0:
+                        channel = pygame.mixer.Channel(total_channels - 1)
+            if channel:
+                channel.set_volume(volume)
+                channel.play(sound)
+
+    def play_music(self, name, loops=-1, fade_ms=0):
+        path = self.music_tracks.get(name)
+        if not path:
+            return
+        try:
+            pygame.mixer.music.load(path)
+            pygame.mixer.music.play(loops=loops, fade_ms=fade_ms)
+            self.current_music = name
+        except pygame.error as exc:
+            print(f"Failed to play music {name}: {exc}")
+
+    def fade_out_music(self, fade_ms=0):
+        if pygame.mixer.music.get_busy():
+            pygame.mixer.music.fadeout(fade_ms)
+
+    def pause_music(self):
+        if pygame.mixer.music.get_busy():
+            pygame.mixer.music.pause()
+
+    def unpause_music(self):
+        pygame.mixer.music.unpause()
+
+    def pause_all(self):
+        self.pause_music()
+        pygame.mixer.pause()
+
+    def unpause_all(self):
+        self.unpause_music()
+        pygame.mixer.unpause()
+
+    def stop_all_sounds(self, stop_music=False):
+        self.stop_all_loops(fade_ms=0)
+        pygame.mixer.stop()
+        if stop_music:
+            pygame.mixer.music.stop()
+            self.current_music = None
+
+    def queue_music(self, name, loops=-1, fade_ms=0, start_time=0):
+        self.queued_music = name
+        self.queued_music_loops = loops
+        self.queued_music_fade_ms = fade_ms
+        self.queued_music_start = start_time
+
+    def update(self):
+        if self.queued_music and pygame.time.get_ticks() >= self.queued_music_start:
+            self.play_music(self.queued_music, loops=self.queued_music_loops, fade_ms=self.queued_music_fade_ms)
+            self.queued_music = None
+
+    def start_loop(self, name, tag, volume=0.7):
+        if tag in self.loop_channels:
+            return
+        path = self.sfx.get(name)
+        if not path:
+            return
+        try:
+            sound = pygame.mixer.Sound(path)
+        except pygame.error as exc:
+            print(f"Failed to load loop sound {name}: {exc}")
+            return
+        channel = pygame.mixer.find_channel()
+        if not channel:
+            return
+        channel.set_volume(volume)
+        channel.play(sound, loops=-1)
+        self.loop_channels[tag] = channel
+
+    def stop_loop(self, tag, fade_ms=0):
+        channel = self.loop_channels.pop(tag, None)
+        if channel:
+            if fade_ms > 0:
+                channel.fadeout(fade_ms)
+            else:
+                channel.stop()
+
+    def stop_all_loops(self, fade_ms=0):
+        for tag in list(self.loop_channels.keys()):
+            self.stop_loop(tag, fade_ms=fade_ms)
+
+
+audio_manager = AudioManager()
+
+# Load menu and gameplay music tracks
+audio_manager.load_music("menu", "Breaking Point.mp3")
+audio_manager.load_music("game", "Sushi Plane [Original 8 Bit Song].mp3")
+audio_manager.load_music("boss", "8-Bit Boss Battle 4 - By EliteFerrex.mp3")
+
+# Load UI and SFX assets
+sound_files = {
+    "blip_select": "blipSelect.wav",
+    "blip_select_confirm": "blipSelect confirm.wav",
+    "explosion": "explosion.wav",
+    "boat_horn": "dragon-studio-boat-horn-386178.mp3",
+    "special_enemy_shot": "freesound_community-meaty-gunshot-101257.mp3",
+    "boss_spread_shot": "dragon-studio-gunshot-511311.mp3",
+    "standard_shot": "universfield-gunshot-352466.mp3",
+    "metal_hit": "floraphonic-metal-hit-10-193281.mp3",
+    "missile_launch": "freesound_community-cas-missile-launching-with-some-reverb-66630.mp3",
+    "rocket_loop": "freesound_community-rocket-loop-99748.mp3",
+    "prop_plane": "freesound_community-prop-plane-14513.mp3",
+    "powerup": "powerUp.wav",
+    "medium_explosion": "freesound_community-medium-explosion-40472.mp3"
+}
+for key, filename in sound_files.items():
+    audio_manager.load_sfx(key, filename)
+
+
+def update_plane_loop():
+    plane_present = bool(Enemy.enemies)
+    if phase_manager and phase_manager.phase == "BOSS" and phase_manager.boss:
+        plane_present = True
+    if plane_present:
+        audio_manager.start_loop("prop_plane", "prop_plane", volume=0.5)
+    else:
+        audio_manager.stop_loop("prop_plane", fade_ms=200)
+
 
 # ---- WINDOW & VIRTUAL SCREEN SETUP ----
 window = pygame.display.set_mode((1080, 720), pygame.RESIZABLE)
@@ -167,6 +338,15 @@ boatenemy_frames = GetDaFrames(boatenemy_sheet, (3, 2))
 boatenemydeath_sheet = pygame.image.load(assets / "EnemyBoatDeath.png")
 boatenemy_explosion_frames = GetDaFrames(boatenemydeath_sheet, (3, 2))
 
+
+def scale_frames(frames, scale):
+    return [pygame.transform.scale(f, (int(f.get_width() * scale), int(f.get_height() * scale))) for f in frames]
+
+if 'bigenemy_frames' in globals():
+    bigenemy_frames = scale_frames(bigenemy_frames, 2.0)
+    bigenemy_explosion_frames = scale_frames(bigenemy_explosion_frames, 2.0)
+
+
 # ---- BOSS ASSET LOADING ----
 boss_main_sprite = pygame.image.load(assets / "BossSprite.png")
 boss_hitbox_sprite = pygame.image.load(assets / "BossSpriteHitBox.png")
@@ -228,6 +408,7 @@ class Enemy():
             else:
                 self.is_flashing = True
                 self.flash_start_time = now
+                audio_manager.play_sound("metal_hit")
 
     def die(self):
         global score, kill_count, double_points_active
@@ -241,11 +422,12 @@ class Enemy():
             points = 200 if double_points_active else 100
             score += points
             kill_count += 1
+            audio_manager.play_sound("explosion")
             
             # Spawn powerup every 25 kills
             if kill_count % 25 == 0:
                 powerup_type = random.choice(["DoublePoints", "Heal", "InstaKill"])
-                Powerup(self.rect.centerx, self.rect.centery, powerup_type)  
+                Powerup(self.rect.centerx, self.rect.centery, powerup_type)
 
     def update(self, deltaTime):
         global score
@@ -277,7 +459,14 @@ class Enemy():
 
             if now - self.last_shot > self.shoot_delay:
                 self.last_shot = now
-                Bullet(self.rect.centerx, self.rect.bottom, 200, bulletframes, is_enemy=True)
+                Bullet(
+                    self.rect.centerx,
+                    self.rect.bottom,
+                    200,
+                    bulletframes,
+                    is_enemy=True,
+                    sound_name="standard_shot"
+                )
 
         if self.is_flashing and self.state == "alive":
             now = pygame.time.get_ticks()
@@ -342,9 +531,36 @@ class SpecialEnemy(Enemy):
                     
                 if now - self.last_multi_shot > 1000:
                     self.last_multi_shot = now
-                    Bullet(self.rect.left, self.rect.centery, 0, bulletframes, is_enemy=True, speed_x=-200, angle=90)
-                    Bullet(self.rect.right, self.rect.centery, 0, bulletframes, is_enemy=True, speed_x=200, angle=270)
-                    Bullet(self.rect.centerx, self.rect.bottom, 200, bulletframes, is_enemy=True, speed_x=0, angle=180)
+                    Bullet(
+                        self.rect.left,
+                        self.rect.centery,
+                        0,
+                        bulletframes,
+                        is_enemy=True,
+                        speed_x=-200,
+                        angle=90,
+                        sound_name="special_enemy_shot"
+                    )
+                    Bullet(
+                        self.rect.right,
+                        self.rect.centery,
+                        0,
+                        bulletframes,
+                        is_enemy=True,
+                        speed_x=200,
+                        angle=270,
+                        sound_name="special_enemy_shot"
+                    )
+                    Bullet(
+                        self.rect.centerx,
+                        self.rect.bottom,
+                        200,
+                        bulletframes,
+                        is_enemy=True,
+                        speed_x=0,
+                        angle=180,
+                        sound_name="special_enemy_shot"
+                    )
 
             elif self.phase == "leaving":
                 self.position.y -= (self.speed * deltaTime) 
@@ -389,6 +605,7 @@ class TrailParticle:
             s = pygame.Surface((int(self.radius * 2), int(self.radius * 2)), pygame.SRCALPHA)
             pygame.draw.circle(s, (150, 150, 150, int(self.life)), (int(self.radius), int(self.radius)), int(self.radius))
             surface.blit(s, (self.position.x - self.radius, self.position.y - self.radius))
+
 
 
 # ---- POWERUP SYSTEM ----
@@ -460,7 +677,7 @@ class Powerup:
 class Bullet():
     bullets = []
 
-    def __init__(self, x, y, speed_y, frames, is_enemy=False, speed_x=0, angle=0):
+    def __init__(self, x, y, speed_y, frames, is_enemy=False, speed_x=0, angle=0, sound_name=None, sound_volume=0.5):
         super().__init__()
         self.is_enemy = is_enemy
         
@@ -477,6 +694,8 @@ class Bullet():
         self.rect = pygame.Rect(self.position.x, self.position.y, self.image.get_width(), self.image.get_height())
         
         Bullet.bullets.append(self)
+        if sound_name:
+            audio_manager.play_sound(sound_name, volume=sound_volume)
 
     def update(self, deltaTime):
         if self.lastframetick + 1000/24 <= pygame.time.get_ticks():
@@ -487,24 +706,27 @@ class Bullet():
 
         self.image = self.frames[self.currentframe]
         self.position += self.velocity * deltaTime
-        self.rect.topleft = (self.position.x, self.position.y) 
-
-        screen.blit(self.image, self.position)
+        self.rect.topleft = (self.position.x, self.position.y)
         
         if (self.position.y <= -100 or self.position.y >= 850 or 
             self.position.x <= -100 or self.position.x >= 1180):
             if self in Bullet.bullets:
                 Bullet.bullets.remove(self)
 
+    def draw(self, surface):
+        surface.blit(self.image, self.position)
+
 
 class TrackingMissile(Bullet):
     def __init__(self, x, y, speed, frames, lifetime=3000):
-        super().__init__(x, y, 0, frames, is_enemy=True)
+        super().__init__(x, y, 0, frames, is_enemy=True, sound_name="missile_launch")
         self.base_speed = speed
         self.spawn_time = pygame.time.get_ticks()
         self.lifetime = lifetime
         self.state = "alive" 
         self.hp = 10  # Explicit Boss parameters assignment override
+        self.rocket_loop_tag = f"rocket_{id(self)}"
+        audio_manager.start_loop("rocket_loop", self.rocket_loop_tag, volume=0.7)
         
         self.original_frames = [f.copy() for f in frames]
         global universal_explosion_frames 
@@ -518,6 +740,8 @@ class TrackingMissile(Bullet):
             self.base_speed = 0 
             self.velocity = Vector2(0, 0)
             self.lastframetick = pygame.time.get_ticks()
+            audio_manager.play_sound("medium_explosion")
+            audio_manager.stop_loop(self.rocket_loop_tag, fade_ms=200)
 
     def update(self, deltaTime):
         now = pygame.time.get_ticks()
@@ -534,7 +758,6 @@ class TrackingMissile(Bullet):
 
             self.image = self.original_frames[self.currentframe]
             self.rect = self.image.get_rect(center=(self.position.x, self.position.y))
-            screen.blit(self.image, self.rect.topleft)
             return
 
         if now - self.spawn_time > self.lifetime:
@@ -568,15 +791,14 @@ class TrackingMissile(Bullet):
         
         self.rect = self.image.get_rect(center=(self.position.x, self.position.y))
 
-        tail_offset = orig_image.get_height() / 2
+        tail_offset = max(self.image.get_width(), self.image.get_height()) / 2
         tail_x = self.position.x - (dir_x * tail_offset)
         tail_y = self.position.y - (dir_y * tail_offset)
-        TrailParticle(tail_x, tail_y)
-
-        screen.blit(self.image, self.rect.topleft)
+        TrailParticle(tail_x + 20, tail_y)
 
         if (self.position.y <= -100 or self.position.y >= 850 or 
             self.position.x <= -100 or self.position.x >= 1180):
+            audio_manager.stop_loop(self.rocket_loop_tag, fade_ms=200)
             if self in Bullet.bullets:
                 Bullet.bullets.remove(self)
 
@@ -632,9 +854,12 @@ class BossComponent:
         self.hp -= amt
         self.is_flashing = True
         self.flash_start = pygame.time.get_ticks()
+        if self.hp > 0:
+            audio_manager.play_sound("metal_hit")
         if self.hp <= 0:
             self.is_dead = True
             self.image = self.dead_img
+            audio_manager.play_sound("explosion")
             global boss_explosions, universal_explosion_frames
             boss_explosions.append(VisualExplosionParticle(self.rect.center, universal_explosion_frames, scale=1.0))
 
@@ -708,7 +933,16 @@ class BossBurstGun(BossComponent):
                 rads = math.radians(-self.fire_angle + 90)
                 bx = math.cos(rads) * 250
                 by = -math.sin(rads) * 250
-                Bullet(self.rect.centerx, self.rect.centery, by, bulletframes, is_enemy=True, speed_x=-bx, angle=self.fire_angle)
+                Bullet(
+                    self.rect.centerx,
+                    self.rect.centery,
+                    by,
+                    bulletframes,
+                    is_enemy=True,
+                    speed_x=-bx,
+                    angle=self.fire_angle,
+                    sound_name="special_enemy_shot"
+                )
                 self.burst_count += 1
                 if self.burst_count >= 3:
                     self.in_burst = False
@@ -751,7 +985,16 @@ class BossSpreadGun(BossComponent):
                     bx = -bx
                     final_angle = -final_angle
                     
-                    Bullet(self.rect.centerx, self.rect.centery, by, bulletframes, is_enemy=True, speed_x=-bx, angle=final_angle)
+                    Bullet(
+                        self.rect.centerx,
+                        self.rect.centery,
+                        by,
+                        bulletframes,
+                        is_enemy=True,
+                        speed_x=-bx,
+                        angle=final_angle,
+                        sound_name="special_enemy_shot"
+                    )
                 
                 self.burst_count += 1
                 if self.burst_count >= 5:
@@ -800,8 +1043,11 @@ class MasterBossFight:
         self.hp -= amt
         self.is_flashing = True
         self.flash_start = pygame.time.get_ticks()
+        if self.hp > 0:
+            audio_manager.play_sound("metal_hit")
         
         if self.hp <= 0:
+            audio_manager.play_sound("explosion")
             self.state = "dying"
             self.death_interval_timer = pygame.time.get_ticks()
             
@@ -826,7 +1072,7 @@ class MasterBossFight:
                 self.timer = now
 
         elif self.state == "hovering":
-            if now - self.timer > 150000: 
+            if now - self.timer > 140000: 
                 self.state = "leaving"
 
         elif self.state == "leaving":
@@ -877,6 +1123,8 @@ class GamePhaseManager:
 
     def update(self, dt):
         now = pygame.time.get_ticks()
+        audio_manager.update()
+        update_plane_loop()
         
         if self.phase == "WAVE":
             if now - self.game_start_time > 120000:  
@@ -899,12 +1147,15 @@ class GamePhaseManager:
             if pygame.time.get_ticks() - self.clearing_timer > 5000: 
                 self.phase = "WAVE"
                 self.game_start_time = pygame.time.get_ticks()
+                audio_manager.play_music("game", loops=-1, fade_ms=500)
 
     def trigger_boss_sequence(self):
         if self.phase == "WAVE":
             self.phase = "CLEARING"
             self.clearing_timer = pygame.time.get_ticks()
-            Enemy.enemies.clear() 
+            Enemy.enemies.clear()
+            audio_manager.fade_out_music(1000)
+            audio_manager.queue_music("boss", loops=0, fade_ms=0, start_time=pygame.time.get_ticks() + 1000)
 
 
 # ---- SYSTEM DECLARATIONS ----
@@ -917,6 +1168,7 @@ last_shot = pygame.time.get_ticks()
 def activate_powerup(powerup_type):
     """Activate the specified powerup effect"""
     global double_points_active, double_points_start, insta_kill_active, insta_kill_start, player_lives
+    audio_manager.play_sound("powerup")
     
     if powerup_type == "DoublePoints":
         double_points_active = True
@@ -943,10 +1195,38 @@ def shoot(spawn_pos):
     now = pygame.time.get_ticks()
     if now - last_shot > shoot_delay:
         last_shot = now
-        Bullet(spawn_pos.x-16, spawn_pos.y, -400, bulletframes, is_enemy=False)
-        Bullet(spawn_pos.x-8, spawn_pos.y, -400, bulletframes, is_enemy=False)
-        Bullet(spawn_pos.x+16, spawn_pos.y, -400, bulletframes, is_enemy=False)
-        Bullet(spawn_pos.x+8, spawn_pos.y, -400, bulletframes, is_enemy=False)
+        Bullet(
+            spawn_pos.x-16,
+            spawn_pos.y,
+            -400,
+            bulletframes,
+            is_enemy=False,
+            sound_name="standard_shot"
+        )
+        Bullet(
+            spawn_pos.x-8,
+            spawn_pos.y,
+            -400,
+            bulletframes,
+            is_enemy=False,
+            sound_name="standard_shot"
+        )
+        Bullet(
+            spawn_pos.x+16,
+            spawn_pos.y,
+            -400,
+            bulletframes,
+            is_enemy=False,
+            sound_name="standard_shot"
+        )
+        Bullet(
+            spawn_pos.x+8,
+            spawn_pos.y,
+            -400,
+            bulletframes,
+            is_enemy=False,
+            sound_name="standard_shot"
+        )
 
 def spawn_enemy(e_type, x, y):
     if e_type == "E1":
@@ -1106,7 +1386,7 @@ def create_controls_menu():
     menu.controls_text = [
         "WASD / ARROW KEYS - MOVE",
         "SPACE - SHOOT",
-        "B - SKIP TO BOSS (JUST FOR TESTERS)",
+        #"B - SKIP TO BOSS (JUST FOR QUICK TESTING)",
         "ESC - PAUSE GAME",
         "ARROW KEYS / WASD - NAVIGATE MENUS"
     ]
@@ -1157,6 +1437,7 @@ main_menu = create_main_menu()
 controls_menu = create_controls_menu()
 credits_menu = create_credits_menu()
 pause_menu = create_pause_menu()
+audio_manager.play_music("menu", loops=-1)
 while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -1186,6 +1467,8 @@ while running:
                         selection = main_menu.select_current()
                         if selection == "PLAY":
                             current_state = GameState.PLAYING
+                            audio_manager.stop_all_sounds(stop_music=True)
+                            audio_manager.play_music("game", loops=-1, fade_ms=500)
                             game_over = False
                             player_lives = 20
                             score = 0
@@ -1217,19 +1500,26 @@ while running:
                     elif current_state == GameState.CREDITS:
                         if credits_menu.select_current() == "BACK":
                             current_state = GameState.MAIN_MENU
+                if event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
+                    audio_manager.play_sound("blip_select_confirm")
             
             # Pause menu navigation
             elif current_state == GameState.PAUSED:
                 if event.key in [pygame.K_UP, pygame.K_w]:
                     pause_menu.navigate_up()
+                    audio_manager.play_sound("blip_select")
                 elif event.key in [pygame.K_DOWN, pygame.K_s]:
                     pause_menu.navigate_down()
+                    audio_manager.play_sound("blip_select")
                 elif event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
                     selection = pause_menu.select_current()
+                    audio_manager.play_sound("blip_select_confirm")
                     if selection == "RESUME":
                         current_state = GameState.PLAYING
+                        audio_manager.unpause_all()
                     elif selection == "RESTART":
                         current_state = GameState.PLAYING
+                        audio_manager.unpause_all()
                         game_over = False
                         player_lives = 20
                         score = 0
@@ -1253,6 +1543,8 @@ while running:
                         current_state = GameState.MAIN_MENU
                         pause_menu.current_selection = 0
                         pause_menu.update_selection()
+                        audio_manager.stop_all_sounds(stop_music=True)
+                        audio_manager.play_music("menu", loops=-1, fade_ms=500)
                         game_over = False
                         player_lives = 20
                         score = 0
@@ -1268,18 +1560,24 @@ while running:
                         Powerup.powerups.clear()
                         boss_explosions.clear()
                         phase_manager = GamePhaseManager()
+                elif event.key == pygame.K_ESCAPE:
+                    current_state = GameState.PLAYING
+                    audio_manager.unpause_all()
             
             # In-game pause toggle
             elif current_state == GameState.PLAYING and event.key == pygame.K_ESCAPE:
                 current_state = GameState.PAUSED
                 pause_menu.current_selection = 0
                 pause_menu.update_selection()
+                audio_manager.pause_all()
             
             # Game over screen - return to menu
             elif current_state == GameState.PLAYING and game_over and (event.key == pygame.K_SPACE or event.key == pygame.K_RETURN):
                 current_state = GameState.MAIN_MENU
                 main_menu.current_selection = 0
                 main_menu.update_selection()
+                audio_manager.stop_all_sounds(stop_music=True)
+                audio_manager.play_music("menu", loops=-1, fade_ms=500)
             
             # In-game controls
             elif current_state == GameState.PLAYING:
@@ -1288,10 +1586,14 @@ while running:
                 if event.key == pygame.K_UP or event.key == pygame.K_w: upHeld = True
                 if event.key == pygame.K_DOWN or event.key == pygame.K_s: downHeld = True
                 
-                if event.key == pygame.K_b:
-                    phase_manager.trigger_boss_sequence()
+                #if event.key == pygame.K_b:
+                    #phase_manager.trigger_boss_sequence()
 
                 if event.key == pygame.K_SPACE:    
+                    plane_size = playerplaneframes[playerplanecurrentframe].get_size()
+                    center_x = position.x + (plane_size[0] / 2)
+                    center_y = position.y
+                    shoot(Vector2(center_x, center_y))
                     plane_size = playerplaneframes[playerplanecurrentframe].get_size()
                     center_x = position.x + (plane_size[0] / 2)
                     center_y = position.y
@@ -1359,6 +1661,7 @@ while running:
                 if special_enemy_type == "B1":
                     SpecialEnemy(random_boss_x, 800, 80, bigenemy_frames, bigenemy_explosion_frames, spinny_blade_frames, 15, 200, 5000)
                 elif special_enemy_type == "B2":
+                    audio_manager.play_sound("boat_horn")
                     SpecialEnemy(random_boss_x, 800, 110, boatenemy_frames, boatenemy_explosion_frames, spinny_blade_frames, 20, 200, 10000)
 
         # ---- COLLISION PROCESSING LOOPS ----
@@ -1493,6 +1796,10 @@ while running:
             exp.draw(screen)
             if exp.finished: boss_explosions.remove(exp)
 
+        for bullet in Bullet.bullets[:]:
+            bullet.draw(screen)
+
+
         if not game_over:
             if player_invulnerable:
                 if now - player_invulnerable_timer > invulnerability_duration:
@@ -1527,9 +1834,9 @@ while running:
         kill_count_surface = font_medium.render(f"KILLS: {kill_count}", True, (200, 200, 200))
         screen.blit(kill_count_surface, (20, 680))
 
-        if phase_manager.phase == "WAVE":
-            hint_surf = font_small.render("PRESS 'B' TO SKIP TO BOSS", True, (200, 200, 200))
-            screen.blit(hint_surf, (350, 680))
+        #if phase_manager.phase == "WAVE":
+            #hint_surf = font_small.render("PRESS 'B' TO SKIP TO BOSS", True, (200, 200, 200))
+            #screen.blit(hint_surf, (350, 680))
         
         # Show pause hint
         pause_hint = font_small.render("PRESS ESC TO PAUSE", True, (150, 150, 150))
