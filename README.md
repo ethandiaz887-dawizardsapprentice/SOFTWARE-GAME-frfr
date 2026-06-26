@@ -1,5 +1,6 @@
-Hello, here is a quick guide to open the file if you downloaded the zip file:
-1. Unzip the file
-2. Open Visual Studio and go to "File"
-3. Click "Open Folder"
-4. Select the **unzipped** file you have unzipped in Step 1.
+Hello, to open the game in Visual Studio, you must follow these steps:
+1. Click the arrow next to the green **Code** button and download the zip file
+2. Unzip the file
+3. Open Visual Studio and go to "File"
+4. Click "Open Folder"
+5. Select the **unzipped** file you have unzipped in Step 1.
