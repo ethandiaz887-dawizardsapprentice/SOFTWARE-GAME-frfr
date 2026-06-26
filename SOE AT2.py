@@ -762,8 +762,8 @@ class BossSpreadGun(BossComponent):
 class MasterBossFight:
     def __init__(self):
         self.position = Vector2(540, 850) 
-        self.hp = 150
-        self.max_hp = 150
+        self.hp = 250
+        self.max_hp = 250
         self.state = "entering"  
         self.timer = 0
         self.components = []
@@ -879,7 +879,7 @@ class GamePhaseManager:
         now = pygame.time.get_ticks()
         
         if self.phase == "WAVE":
-            if now - self.game_start_time > 300000:  
+            if now - self.game_start_time > 120000:  
                 self.trigger_boss_sequence()
 
         elif self.phase == "CLEARING":
@@ -1093,7 +1093,7 @@ def create_main_menu():
         UIButton("CREDITS", 340, 490, 400, 80, font_large,
                 button_color=(150, 100, 50), border_color=(255, 180, 100))
     ]
-    return Menu("UNNAMED PLANE GAME", buttons, font_huge)
+    return Menu("THE PLANE GAME", buttons, font_huge)
 
 
 def create_controls_menu():
@@ -1116,22 +1116,25 @@ def create_controls_menu():
 def create_credits_menu():
     """Create credits menu"""
     buttons = [
-        UIButton("BACK", 340, 550, 400, 80, font_large,
+        UIButton("BACK", 340, 600, 400, 80, font_large,
                 button_color=(100, 50, 50), border_color=(255, 100, 100))
     ]
     menu = Menu("CREDITS", buttons, font_huge)
     menu.credits_text = [
-        "GAME DESIGN & DEVELOPMENT",
-        "[Placeholder]",
+        "GAME DESIGN",
+        "[Ethan Diaz]",
         "",
         "GRAPHICS & ASSETS",
-        "[Placeholder]",
+        "[Ethan Diaz, Arush Mula]",
         "",
         "MUSIC & SOUND DESIGN",
-        "[Placeholder]",
+        "[Idk man]",
         "",
-        "TESTERS"
-        "[Placeholder]"
+        "TESTERS",
+        "[Zac Matthews, Ian Jimenez Pereira]",
+        "",
+        "DOCUMENTATION & DEVELOPMENT",
+        "[Ethan Diaz, Arush Mula, Zac Matthews, Ian Jimenez Pereira]"
     ]
     return menu
 
